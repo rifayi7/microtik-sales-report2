@@ -1,36 +1,41 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# HotSpot Pro - Sales Reporting Dashboard
 
-## Getting Started
+A premium, interactive sales reporting and analytics dashboard for **MikroTik Hotspot Voucher Management**. This application connects directly to the core database (`vouchers.db`) to provide detailed reporting on agents, plans, and voucher sales.
 
-First, run the development server:
+## 🚀 Key Features
+
+*   📊 **Real-time Metrics**: Total revenue, sales count, active agents, and today vs. yesterday comparative growth.
+*   📈 **Interactive Trends**: Line & area charts displaying daily/monthly sales volume and revenue trends.
+*   👥 **Agent Leaderboard**: Rank and track agent sales performance, vouchers sold, and generated revenue.
+*   📝 **Detailed Sales Logs**: Search, sort, and filter individual transactions by Date Range, Agent, Plan Duration, Router ID, and customer phone number or voucher code.
+*   📥 **CSV Export**: Export filtered sales reports for accounting and offline analysis.
+*   ⚙️ **Pricing Settings**: Custom validity-to-price mapping saved directly to SQLite to dynamically calculate revenue.
+
+---
+
+## 🛠️ Setup Instructions
+
+### 1. Database Configuration
+Create a `.env.local` file in the root directory (one has been pre-created for you) with the path pointing to your main voucher application's database:
+
+```env
+DATABASE_PATH=C:/Users/User/Documents/microtik/vouchers.db
+```
+
+### 2. Start the Application
+Run the development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) in your browser to view the dashboard.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 📦 Tech Stack
+- **Framework**: Next.js 16 (App Router)
+- **Styling**: Tailwind CSS v4 & PostCSS
+- **Database**: Native SQLite (`node:sqlite`)
+- **Charts**: Recharts
+- **Icons**: Lucide React

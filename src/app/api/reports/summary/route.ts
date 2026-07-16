@@ -1,0 +1,131 @@
+import { NextResponse } from "next/server";
+import { getDB } from "@/lib/db";
+import { buildWhereClause } from "@/lib/query-builder";
+
+export const runtime = "nodejs";
+
+export async function GET(request: Request) {
+  try {
+    const db = getDB();
+    const url = new URL(request.url);
+    const { whereClause, params } = buildWhereClause(url.searchParams);
+
+    // 1. Get high-level summary (Total Sales, Total Revenue)
+    const summarySql = `
+      SELECT 
+        COUNT(*) as totalSales, 
+        SUM(COALESCE(p.price, 0)) as totalRevenue 
+      FROM vouchers v
+      LEFT JOIN sales_pricing p ON v.validity_days = p.validity_days
+      ${whereClause}
+    `;
+    const summaryRow = db.prepare(summarySql).get(...params) as unknown as {
+      totalSales: number;
+      totalRevenue: number | null;
+    } | undefined;
+
+    const totalSales = summaryRow?.totalSales || 0;
+    const totalRevenue = summaryRow?.totalRevenue || 0;
+
+    // 2. Get Sales Performance by Agent
+    const agentSql = `
+      SELECT 
+        v.sold_by as name, 
+        COUNT(*) as salesCount, 
+        SUM(COALESCE(p.price, 0)) as revenue 
+      FROM vouchers v
+      LEFT JOIN sales_pricing p ON v.validity_days = p.validity_days
+      ${whereClause} AND v.sold_by IS NOT NULL AND v.sold_by != ''
+      GROUP BY v.sold_by
+      ORDER BY revenue DESC
+    `;
+    const agents = db.prepare(agentSql).all(...params) as unknown as {
+      name: string;
+      salesCount: number;
+      revenue: number;
+    }[];
+
+    // 3. Get Plan Performance (Distribution)
+    const planSql = `
+      SELECT 
+        v.validity_days || ' Days' as planName, 
+        COUNT(*) as count, 
+        SUM(COALESCE(p.price, 0)) as revenue 
+      FROM vouchers v
+      LEFT JOIN sales_pricing p ON v.validity_days = p.validity_days
+      ${whereClause}
+      GROUP BY v.validity_days
+      ORDER BY count DESC
+    `;
+    const plans = db.prepare(planSql).all(...params) as unknown as {
+      planName: string;
+      count: number;
+      revenue: number;
+    }[];
+
+    // 4. Get Sales Trend grouped by day (Daily)
+    const trendSql = `
+      SELECT 
+        strftime('%Y-%m-%d', v.used_at) as date, 
+        COUNT(*) as sales, 
+        SUM(COALESCE(p.price, 0)) as revenue 
+      FROM vouchers v
+      LEFT JOIN sales_pricing p ON v.validity_days = p.validity_days
+      ${whereClause}
+      GROUP BY date
+      ORDER BY date ASC
+    `;
+    const trends = db.prepare(trendSql).all(...params) as unknown as {
+      date: string;
+      sales: number;
+      revenue: number;
+    }[];
+
+    // 5. Compare Today vs Yesterday (for dashboard indicators)
+    const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+    const yesterdayDate = new Date(Date.now() - 86400000);
+    const yesterday = yesterdayDate.toISOString().split("T")[0];
+
+    const todayStatsSql = `
+      SELECT COUNT(*) as count, SUM(COALESCE(p.price, 0)) as revenue
+      FROM vouchers v
+      LEFT JOIN sales_pricing p ON v.validity_days = p.validity_days
+      WHERE v.is_used = 1 AND v.used_at >= ? AND v.used_at <= ?
+    `;
+    const todayStats = db.prepare(todayStatsSql).get(`${today} 00:00:00`, `${today} 23:59:59`) as unknown as {
+      count: number;
+      revenue: number | null;
+    };
+
+    const yesterdayStats = db.prepare(todayStatsSql).get(`${yesterday} 00:00:00`, `${yesterday} 23:59:59`) as unknown as {
+      count: number;
+      revenue: number | null;
+    };
+
+    const todaySales = todayStats?.count || 0;
+    const todayRevenue = todayStats?.revenue || 0;
+    const yesterdaySales = yesterdayStats?.count || 0;
+    const yesterdayRevenue = yesterdayStats?.revenue || 0;
+
+    return NextResponse.json({
+      success: true,
+      summary: {
+        totalSales,
+        totalRevenue,
+        activeAgentsCount: agents.length,
+      },
+      comparison: {
+        today: { sales: todaySales, revenue: todayRevenue },
+        yesterday: { sales: yesterdaySales, revenue: yesterdayRevenue },
+      },
+      agents,
+      plans,
+      trends,
+    });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Failed to load summary stats" },
+      { status: 500 }
+    );
+  }
+}
