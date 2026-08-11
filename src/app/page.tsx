@@ -20,7 +20,11 @@ import {
   CreditCard,
   BookOpen,
   Coins,
-  Settings as CogIcon
+  Settings as CogIcon,
+  Plus,
+  Trash2,
+  Edit,
+  X
 } from "lucide-react";
 import { 
   ResponsiveContainer, 
@@ -40,7 +44,25 @@ import {
   Legend
 } from "recharts";
 
-type Tab = "dashboard" | "voucher-sales" | "monthly-sales" | "sales-chart" | "agents" | "pricing";
+type Tab = 
+  | "dashboard" 
+  | "voucher-sales" 
+  | "monthly-sales" 
+  | "sales-chart" 
+  | "voucher-validity" 
+  | "voucher-hotspot" 
+  | "payment-camp" 
+  | "payment-user" 
+  | "user-sale"
+  | "companies"
+  | "camps"
+  | "validity-profiles"
+  | "camp-validity-pricing"
+  | "notifications"
+  | "payments-list"
+  | "collected-payments"
+  | "agents" 
+  | "pricing";
 
 interface SummaryData {
   summary: {
@@ -110,6 +132,88 @@ export default function SalesReportDashboard() {
   const [noOfMonths, setNoOfMonths] = useState(3);
   const [isStacked, setIsStacked] = useState(false);
 
+  // Tab 4: Voucher Data / Validity Report Specific States
+  const [validityData, setValidityData] = useState<Record<string, any>>({});
+  const [validityProfiles, setValidityProfiles] = useState<string[]>([]);
+  const [activeProfile, setActiveProfile] = useState<string>("");
+  const [loadingReport, setLoadingReport] = useState(false);
+  const [reportSortBy, setReportSortBy] = useState("");
+
+  // Tab 5: Voucher Data / Hotspot Report Specific States
+  const [hotspotData, setHotspotData] = useState<Record<string, any>>({});
+  const [hotspotProfiles, setHotspotProfiles] = useState<string[]>([]);
+  const [activeHotspotProfile, setActiveHotspotProfile] = useState<string>("");
+  const [loadingHotspotReport, setLoadingHotspotReport] = useState(false);
+  const [hotspotSortBy, setHotspotSortBy] = useState("");
+
+  // Tab 6: Payment Camp Report Specific States
+  const [paymentCampData, setPaymentCampData] = useState<any[]>([]);
+  const [loadingPaymentCamp, setLoadingPaymentCamp] = useState(false);
+
+  // Tab 7: Payment User Report Specific States
+  const [paymentUserData, setPaymentUserData] = useState<any[]>([]);
+  const [loadingPaymentUser, setLoadingPaymentUser] = useState(false);
+  const [selectedCampFilter, setSelectedCampFilter] = useState("all");
+
+  // Tab 8: Users Sale Report Specific States
+  const [userSaleData, setUserSaleData] = useState<any[]>([]);
+  const [loadingUserSale, setLoadingUserSale] = useState(false);
+
+  // Tab 9: Companies Master Specific States
+  const [companiesList, setCompaniesList] = useState<any[]>([]);
+  const [loadingCompanies, setLoadingCompanies] = useState(false);
+  const [companySearch, setCompanySearch] = useState("");
+  const [companySortBy, setCompanySortBy] = useState("");
+  const [editCompany, setEditCompany] = useState<{ id?: number; name: string } | null>(null);
+  const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
+
+  // Tab 10: Camps Master Specific States
+  const [campsList, setCampsList] = useState<any[]>([]);
+  const [loadingCamps, setLoadingCamps] = useState(false);
+  const [campSearch, setCampSearch] = useState("");
+  const [campSortBy, setCampSortBy] = useState("");
+  const [campCompanyFilter, setCampCompanyFilter] = useState("all");
+  const [editCamp, setEditCamp] = useState<{ id?: number; name: string; company_name: string; hotspot_name: string; strength: number } | null>(null);
+  const [isCampModalOpen, setIsCampModalOpen] = useState(false);
+
+  // Tab 11: Validity Profiles Master Specific States
+  const [vpList, setVpList] = useState<any[]>([]);
+  const [loadingVp, setLoadingVp] = useState(false);
+  const [vpSearch, setVpSearch] = useState("");
+  const [vpSortBy, setVpSortBy] = useState("");
+  const [editVp, setEditVp] = useState<{ id?: number; name: string } | null>(null);
+  const [isVpModalOpen, setIsVpModalOpen] = useState(false);
+
+  // Tab 12: Camp Validity Profiles Specific States
+  const [cvpList, setCvpList] = useState<any[]>([]);
+  const [loadingCvp, setLoadingCvp] = useState(false);
+  const [cvpSearch, setCvpSearch] = useState("");
+  const [cvpSortBy, setCvpSortBy] = useState("");
+  const [cvpCampFilter, setCvpCampFilter] = useState("all");
+  const [editCvp, setEditCvp] = useState<{ id?: number; camp_name: string; validity_name: string; company_name: string; price: number } | null>(null);
+  const [isCvpModalOpen, setIsCvpModalOpen] = useState(false);
+
+  // Tab 13: Notifications Master Specific States
+  const [notifList, setNotifList] = useState<any[]>([]);
+  const [loadingNotif, setLoadingNotif] = useState(false);
+  const [notifSearch, setNotifSearch] = useState("");
+  const [notifSortBy, setNotifSortBy] = useState("");
+  const [editNotif, setEditNotif] = useState<{ id?: number; camp_name: string; user_name: string; category: string; message: string } | null>(null);
+  const [isNotifModalOpen, setIsNotifModalOpen] = useState(false);
+
+  // Tab 14 & 15: Payments Specific States
+  const [paymentsList, setPaymentsList] = useState<any[]>([]);
+  const [loadingPayments, setLoadingPayments] = useState(false);
+  const [paymentSearch, setPaymentSearch] = useState("");
+  const [paymentCampFilter, setPaymentCampFilter] = useState("all");
+  const [paymentPaidYearMonth, setPaymentPaidYearMonth] = useState("");
+  const [editPayment, setEditPayment] = useState<{ id?: number; paid_by_user: string; camp_name: string; paid_for_year_month: string; amount: number; collected_by: string; split_by: string; payment_date?: string; payment_time?: string } | null>(null);
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+
+  const [collectedList, setCollectedList] = useState<any[]>([]);
+  const [loadingCollected, setLoadingCollected] = useState(false);
+  const [collectedSearch, setCollectedSearch] = useState("");
+
   // API Data State
   const [summaryData, setSummaryData] = useState<SummaryData | null>(null);
   const [salesData, setSalesData] = useState<SalesData | null>(null);
@@ -126,7 +230,7 @@ export default function SalesReportDashboard() {
   const [carouselIndex, setCarouselIndex] = useState(0);
 
   // Dropdown States for Header Navigation
-  const [activeDropdown, setActiveDropdown] = useState<"sales" | "reports" | "masters" | null>(null);
+  const [activeDropdown, setActiveDropdown] = useState<"sales" | "reports" | "masters" | "payments" | null>(null);
 
   // Custom pricing edit state
   const [editPriceMap, setEditPriceMap] = useState<Record<number, string>>({});
@@ -221,7 +325,6 @@ export default function SalesReportDashboard() {
       const params = new URLSearchParams();
       params.append("page", String(page));
       
-      // If we are in Monthly or Chart views, we want a large limit to do client-side aggregates
       const limitVal = ["monthly-sales", "sales-chart"].includes(activeTab) ? "10000" : String(entriesLimit);
       params.append("limit", limitVal);
       
@@ -242,6 +345,281 @@ export default function SalesReportDashboard() {
       console.error("Error fetching sales log:", err);
     } finally {
       setLoadingSales(false);
+    }
+  };
+
+  // Fetch validity reports data
+  const fetchValidityReport = async () => {
+    if (!isMounted) return;
+    setLoadingReport(true);
+    try {
+      const params = new URLSearchParams();
+      if (startDate) params.append("startDate", startDate);
+      if (endDate) params.append("endDate", endDate);
+      if (searchQuery) params.append("search", searchQuery);
+      if (reportSortBy) params.append("sortBy", reportSortBy);
+
+      const res = await fetch(`/api/reports/validity?${params.toString()}`);
+      const data = await res.json();
+      if (data.success) {
+        setValidityData(data.data);
+        setValidityProfiles(data.profiles);
+        if (data.profiles.length > 0 && (!activeProfile || !data.profiles.includes(activeProfile))) {
+          setActiveProfile(data.profiles[0]);
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching validity report stats:", err);
+    } finally {
+      setLoadingReport(false);
+    }
+  };
+
+  // Fetch hotspot reports data
+  const fetchHotspotReport = async () => {
+    if (!isMounted) return;
+    setLoadingHotspotReport(true);
+    try {
+      const params = new URLSearchParams();
+      if (startDate) params.append("startDate", startDate);
+      if (endDate) params.append("endDate", endDate);
+      if (searchQuery) params.append("search", searchQuery);
+      if (hotspotSortBy) params.append("sortBy", hotspotSortBy);
+
+      const res = await fetch(`/api/reports/hotspot?${params.toString()}`);
+      const data = await res.json();
+      if (data.success) {
+        setHotspotData(data.data);
+        setHotspotProfiles(data.hotspots);
+        if (data.hotspots.length > 0 && (!activeHotspotProfile || !data.hotspots.includes(activeHotspotProfile))) {
+          setActiveHotspotProfile(data.hotspots[0]);
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching hotspot reports:", err);
+    } finally {
+      setLoadingHotspotReport(false);
+    }
+  };
+
+  // Fetch payment camp report
+  const fetchPaymentCampReport = async () => {
+    if (!isMounted) return;
+    setLoadingPaymentCamp(true);
+    try {
+      const params = new URLSearchParams();
+      if (startDate) params.append("startDate", startDate);
+      if (endDate) params.append("endDate", endDate);
+      if (searchQuery) params.append("search", searchQuery);
+
+      const res = await fetch(`/api/reports/payment-camp?${params.toString()}`);
+      const data = await res.json();
+      if (data.success) {
+        setPaymentCampData(data.data);
+      }
+    } catch (err) {
+      console.error("Error fetching payment camp reports:", err);
+    } finally {
+      setLoadingPaymentCamp(false);
+    }
+  };
+
+  // Fetch payment user report
+  const fetchPaymentUserReport = async () => {
+    if (!isMounted) return;
+    setLoadingPaymentUser(true);
+    try {
+      const params = new URLSearchParams();
+      if (startDate) params.append("startDate", startDate);
+      if (endDate) params.append("endDate", endDate);
+      if (searchQuery) params.append("search", searchQuery);
+      if (selectedCampFilter) params.append("camp", selectedCampFilter);
+
+      const res = await fetch(`/api/reports/payment-user?${params.toString()}`);
+      const data = await res.json();
+      if (data.success) {
+        setPaymentUserData(data.data);
+      }
+    } catch (err) {
+      console.error("Error fetching payment user reports:", err);
+    } finally {
+      setLoadingPaymentUser(false);
+    }
+  };
+
+  // Fetch Users Sale Report
+  const fetchUserSaleReport = async () => {
+    if (!isMounted) return;
+    setLoadingUserSale(true);
+    try {
+      const params = new URLSearchParams();
+      if (searchQuery) params.append("search", searchQuery);
+      if (selectedAgent) params.append("user", selectedAgent);
+      if (selectedRouter) params.append("camp", selectedRouter);
+
+      const res = await fetch(`/api/reports/user-sale?${params.toString()}`);
+      const data = await res.json();
+      if (data.success) {
+        setUserSaleData(data.data);
+      }
+    } catch (err) {
+      console.error("Error fetching user sale reports:", err);
+    } finally {
+      setLoadingUserSale(false);
+    }
+  };
+
+  // Fetch Companies list
+  const fetchCompanies = async () => {
+    if (!isMounted) return;
+    setLoadingCompanies(true);
+    try {
+      const params = new URLSearchParams();
+      if (companySearch) params.append("search", companySearch);
+      if (companySortBy) params.append("sortBy", companySortBy);
+
+      const res = await fetch(`/api/reports/companies?${params.toString()}`);
+      const data = await res.json();
+      if (data.success) {
+        setCompaniesList(data.data);
+      }
+    } catch (err) {
+      console.error("Error fetching companies:", err);
+    } finally {
+      setLoadingCompanies(false);
+    }
+  };
+
+  // Fetch Camps list
+  const fetchCamps = async () => {
+    if (!isMounted) return;
+    setLoadingCamps(true);
+    try {
+      const params = new URLSearchParams();
+      if (campSearch) params.append("search", campSearch);
+      if (campSortBy) params.append("sortBy", campSortBy);
+      if (campCompanyFilter) params.append("company", campCompanyFilter);
+
+      const res = await fetch(`/api/reports/camps?${params.toString()}`);
+      const data = await res.json();
+      if (data.success) {
+        setCampsList(data.data);
+      }
+    } catch (err) {
+      console.error("Error fetching camps:", err);
+    } finally {
+      setLoadingCamps(false);
+    }
+  };
+
+  // Fetch Validity Profiles list
+  const fetchValidityProfiles = async () => {
+    if (!isMounted) return;
+    setLoadingVp(true);
+    try {
+      const params = new URLSearchParams();
+      if (vpSearch) params.append("search", vpSearch);
+      if (vpSortBy) params.append("sortBy", vpSortBy);
+
+      const res = await fetch(`/api/reports/validity-profiles?${params.toString()}`);
+      const data = await res.json();
+      if (data.success) {
+        setVpList(data.data);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingVp(false);
+    }
+  };
+
+  // Fetch Camp Validity Pricing list
+  const fetchCampValidityPricing = async () => {
+    if (!isMounted) return;
+    setLoadingCvp(true);
+    try {
+      const params = new URLSearchParams();
+      if (cvpSearch) params.append("search", cvpSearch);
+      if (cvpSortBy) params.append("sortBy", cvpSortBy);
+      if (cvpCampFilter) params.append("camp", cvpCampFilter);
+
+      const res = await fetch(`/api/reports/camp-validity-pricing?${params.toString()}`);
+      const data = await res.json();
+      if (data.success) {
+        setCvpList(data.data);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingCvp(false);
+    }
+  };
+
+  // Fetch Notifications list
+  const fetchNotifications = async () => {
+    if (!isMounted) return;
+    setLoadingNotif(true);
+    try {
+      const params = new URLSearchParams();
+      if (notifSearch) params.append("search", notifSearch);
+      if (notifSortBy) params.append("sortBy", notifSortBy);
+
+      const res = await fetch(`/api/reports/notifications?${params.toString()}`);
+      const data = await res.json();
+      if (data.success) {
+        setNotifList(data.data);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingNotif(false);
+    }
+  };
+
+  // Fetch Payments List
+  const fetchPayments = async () => {
+    if (!isMounted) return;
+    setLoadingPayments(true);
+    try {
+      const params = new URLSearchParams();
+      if (paymentSearch) params.append("search", paymentSearch);
+      if (paymentCampFilter && paymentCampFilter !== "all") params.append("camp", paymentCampFilter);
+      if (startDate) params.append("startDate", startDate);
+      if (endDate) params.append("endDate", endDate);
+      if (paymentPaidYearMonth) params.append("paidYearMonth", paymentPaidYearMonth);
+
+      const res = await fetch(`/api/reports/payments?${params.toString()}`);
+      const data = await res.json();
+      if (data.success) {
+        setPaymentsList(data.data);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingPayments(false);
+    }
+  };
+
+  // Fetch Collected Payments List
+  const fetchCollectedPayments = async () => {
+    if (!isMounted) return;
+    setLoadingCollected(true);
+    try {
+      const params = new URLSearchParams();
+      params.append("collectedOnly", "true");
+      if (collectedSearch) params.append("search", collectedSearch);
+      if (startDate) params.append("startDate", startDate);
+      if (endDate) params.append("endDate", endDate);
+
+      const res = await fetch(`/api/reports/payments?${params.toString()}`);
+      const data = await res.json();
+      if (data.success) {
+        setCollectedList(data.data);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingCollected(false);
     }
   };
 
@@ -267,6 +645,319 @@ export default function SalesReportDashboard() {
     }
   };
 
+  // Save Company Master record
+  const handleSaveCompany = async () => {
+    if (!editCompany?.name || editCompany.name.trim() === "") {
+      alert("Company name cannot be empty");
+      return;
+    }
+    try {
+      const res = await fetch("/api/reports/companies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editCompany)
+      });
+      const data = await res.json();
+      if (data.success) {
+        setIsCompanyModalOpen(false);
+        setEditCompany(null);
+        fetchCompanies();
+      } else {
+        alert(data.error || "Failed to save company");
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Delete Company Master record
+  const handleDeleteCompany = async (id: number) => {
+    if (!confirm("Are you sure you want to delete this company?")) return;
+    try {
+      const res = await fetch("/api/reports/companies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, action: "delete" })
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchCompanies();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Save Camp Master record
+  const handleSaveCamp = async () => {
+    if (!editCamp?.name || editCamp.name.trim() === "") {
+      alert("Camp name cannot be empty");
+      return;
+    }
+    try {
+      const res = await fetch("/api/reports/camps", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editCamp)
+      });
+      const data = await res.json();
+      if (data.success) {
+        setIsCampModalOpen(false);
+        setEditCamp(null);
+        fetchCamps();
+      } else {
+        alert(data.error || "Failed to save camp");
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Delete Camp Master record
+  const handleDeleteCamp = async (id: number) => {
+    if (!confirm("Are you sure you want to delete this camp?")) return;
+    try {
+      const res = await fetch("/api/reports/camps", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, action: "delete" })
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchCamps();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Save Validity Profile record
+  const handleSaveVp = async () => {
+    if (!editVp?.name || editVp.name.trim() === "") {
+      alert("Profile name is required");
+      return;
+    }
+    try {
+      const res = await fetch("/api/reports/validity-profiles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editVp)
+      });
+      const data = await res.json();
+      if (data.success) {
+        setIsVpModalOpen(false);
+        setEditVp(null);
+        fetchValidityProfiles();
+      } else {
+        alert(data.error || "Failed to save validity profile");
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Delete Validity Profile record
+  const handleDeleteVp = async (id: number) => {
+    if (!confirm("Are you sure you want to delete this profile?")) return;
+    try {
+      const res = await fetch("/api/reports/validity-profiles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, action: "delete" })
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchValidityProfiles();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Save Camp Validity Pricing record
+  const handleSaveCvp = async () => {
+    if (!editCvp?.camp_name || !editCvp.validity_name) {
+      alert("Camp name and validity profile name are required");
+      return;
+    }
+    try {
+      const res = await fetch("/api/reports/camp-validity-pricing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editCvp)
+      });
+      const data = await res.json();
+      if (data.success) {
+        setIsCvpModalOpen(false);
+        setEditCvp(null);
+        fetchCampValidityPricing();
+      } else {
+        alert(data.error || "Failed to save camp validity profile");
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Delete Camp Validity Pricing record
+  const handleDeleteCvp = async (id: number) => {
+    if (!confirm("Are you sure you want to delete this camp profile?")) return;
+    try {
+      const res = await fetch("/api/reports/camp-validity-pricing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, action: "delete" })
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchCampValidityPricing();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Toggle Camp Validity Pricing active status
+  const handleToggleCvpStatus = async (id: number, currentStatus: number) => {
+    try {
+      const newStatus = currentStatus === 1 ? 0 : 1;
+      const res = await fetch("/api/reports/camp-validity-pricing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, status: newStatus, action: "toggle" })
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchCampValidityPricing();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Save Notification record
+  const handleSaveNotif = async () => {
+    if (!editNotif?.camp_name || !editNotif?.user_name || !editNotif?.message) {
+      alert("Camp name, user and message are required");
+      return;
+    }
+    try {
+      const res = await fetch("/api/reports/notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editNotif)
+      });
+      const data = await res.json();
+      if (data.success) {
+        setIsNotifModalOpen(false);
+        setEditNotif(null);
+        fetchNotifications();
+      } else {
+        alert(data.error || "Failed to save notification");
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Delete Notification record
+  const handleDeleteNotif = async (id: number) => {
+    if (!confirm("Are you sure?")) return;
+    try {
+      const res = await fetch("/api/reports/notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, action: "delete" })
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchNotifications();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Toggle Notification Read Status
+  const handleToggleNotifRead = async (id: number, currentRead: number) => {
+    try {
+      const newRead = currentRead === 1 ? 0 : 1;
+      const res = await fetch("/api/reports/notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, is_read: newRead, action: "toggle" })
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchNotifications();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Save Payment record
+  const handleSavePayment = async () => {
+    if (!editPayment?.paid_by_user || !editPayment?.camp_name || !editPayment?.paid_for_year_month || !editPayment?.amount) {
+      alert("Paid by user, Camp, Month and Amount are required");
+      return;
+    }
+    try {
+      const res = await fetch("/api/reports/payments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editPayment)
+      });
+      const data = await res.json();
+      if (data.success) {
+        setIsPaymentModalOpen(false);
+        setEditPayment(null);
+        fetchPayments();
+      } else {
+        alert(data.error || "Failed to save payment record");
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Delete Payment record
+  const handleDeletePayment = async (id: number) => {
+    if (!confirm("Are you sure?")) return;
+    try {
+      const res = await fetch("/api/reports/payments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, action: "delete" })
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchPayments();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Toggle Payment verification
+  const handleTogglePaymentVerify = async (id: number, currentRead: number) => {
+    try {
+      const newRead = currentRead === 1 ? 0 : 1;
+      const res = await fetch("/api/reports/payments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, verified_status: newRead, action: "verify" })
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchPayments();
+        fetchCollectedPayments();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   // Re-fetch when filters, limit, or active tab changes
   useEffect(() => {
     if (!isMounted) return;
@@ -277,16 +968,68 @@ export default function SalesReportDashboard() {
       fetchSales(1);
     } else if (activeTab === "monthly-sales") {
       fetchSummary();
-      fetchSales(1); // Fetch sales logs for camp dropdown listing or filters
+      fetchSales(1);
     } else if (activeTab === "sales-chart") {
       fetchSummary();
-      fetchSales(1); // Fetch all records within range to aggregate stacked/grouped chart
+      fetchSales(1);
+    } else if (activeTab === "voucher-validity") {
+      fetchValidityReport();
+    } else if (activeTab === "voucher-hotspot") {
+      fetchHotspotReport();
+    } else if (activeTab === "payment-camp") {
+      fetchPaymentCampReport();
+    } else if (activeTab === "payment-user") {
+      fetchPaymentUserReport();
+    } else if (activeTab === "user-sale") {
+      fetchUserSaleReport();
+    } else if (activeTab === "companies") {
+      fetchCompanies();
+    } else if (activeTab === "camps") {
+      fetchCamps();
+    } else if (activeTab === "validity-profiles") {
+      fetchValidityProfiles();
+    } else if (activeTab === "camp-validity-pricing") {
+      fetchCampValidityPricing();
+    } else if (activeTab === "notifications") {
+      fetchNotifications();
+    } else if (activeTab === "payments-list") {
+      fetchPayments();
+    } else if (activeTab === "collected-payments") {
+      fetchCollectedPayments();
     } else if (activeTab === "agents") {
       fetchSummary();
     } else if (activeTab === "pricing") {
       fetchPricing();
     }
-  }, [activeTab, startDate, endDate, selectedAgent, selectedValidity, selectedRouter, entriesLimit, isMounted]);
+  }, [
+    activeTab, 
+    startDate, 
+    endDate, 
+    selectedAgent, 
+    selectedValidity, 
+    selectedRouter, 
+    entriesLimit, 
+    reportSortBy, 
+    hotspotSortBy, 
+    selectedCampFilter,
+    companySearch,
+    companySortBy,
+    campSearch,
+    campSortBy,
+    campCompanyFilter,
+    vpSearch,
+    vpSortBy,
+    cvpSearch,
+    cvpSortBy,
+    cvpCampFilter,
+    notifSearch,
+    notifSortBy,
+    paymentSearch,
+    paymentCampFilter,
+    paymentPaidYearMonth,
+    collectedSearch,
+    isMounted
+  ]);
 
   // Carousel slider effect for dashboard leader
   useEffect(() => {
@@ -305,6 +1048,21 @@ export default function SalesReportDashboard() {
     }
     if (activeTab === "voucher-sales" || activeTab === "monthly-sales" || activeTab === "sales-chart") {
       fetchSales(1);
+    }
+    if (activeTab === "voucher-validity") {
+      fetchValidityReport();
+    }
+    if (activeTab === "voucher-hotspot") {
+      fetchHotspotReport();
+    }
+    if (activeTab === "payment-camp") {
+      fetchPaymentCampReport();
+    }
+    if (activeTab === "payment-user") {
+      fetchPaymentUserReport();
+    }
+    if (activeTab === "user-sale") {
+      fetchUserSaleReport();
     }
   };
 
@@ -326,6 +1084,25 @@ export default function SalesReportDashboard() {
     setSelectedRouter("all");
     setSearchQuery("");
     setEntriesLimit(100);
+    setReportSortBy("");
+    setHotspotSortBy("");
+    setSelectedCampFilter("all");
+    setCompanySearch("");
+    setCompanySortBy("");
+    setCampSearch("");
+    setCampSortBy("");
+    setCampCompanyFilter("all");
+    setVpSearch("");
+    setVpSortBy("");
+    setCvpSearch("");
+    setCvpSortBy("");
+    setCvpCampFilter("all");
+    setNotifSearch("");
+    setNotifSortBy("");
+    setPaymentSearch("");
+    setPaymentCampFilter("all");
+    setPaymentPaidYearMonth("");
+    setCollectedSearch("");
     setSelectedMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`);
     setStartMonthDay(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-05`);
   };
@@ -423,7 +1200,6 @@ export default function SalesReportDashboard() {
   // Group daily trends for Monthly Voucher Sales
   const monthlyDailyTrends = useMemo(() => {
     if (!summaryData?.trends) return [];
-    // We already have daily trends for the selected month range. Just map it!
     return summaryData.trends.map((item) => ({
       date: item.date,
       sales: item.sales,
@@ -457,7 +1233,6 @@ export default function SalesReportDashboard() {
       if (sale.timestamp.includes("-")) {
         const parts = sale.timestamp.split(" ")[0].split("-");
         if (parts.length === 3) {
-          // Check if format is YYYY-MM-DD or DD-MM-YYYY
           if (parts[0].length === 4) {
             monthKey = `${parts[0]}-${parts[1]}`;
           } else {
@@ -476,13 +1251,11 @@ export default function SalesReportDashboard() {
       groups[monthKey].Total += sale.price;
     });
     
-    // Convert to sorted array
     return Object.values(groups).sort((a: any, b: any) => a.month.localeCompare(b.month));
   }, [salesData]);
 
-  // Dynamic colors list for stack bars
+  // Dynamic colors list for stack bars and variables definition
   const campColors = COLORS;
-
   const agentOptions = salesData?.filters?.agents || [];
   const planOptions = salesData?.filters?.plans || [];
   const carouselItems = summaryData?.agents.slice(0, 5) || [];
@@ -499,7 +1272,84 @@ export default function SalesReportDashboard() {
     return salesData.sales.reduce((sum, item) => sum + item.price, 0);
   }, [salesData]);
 
-  const handleDropdownToggle = (e: React.MouseEvent, type: "sales" | "reports" | "masters") => {
+  // Calculate totals for active Validity Profile table (Voucher Data / Validity)
+  const activeProfileTableData = useMemo(() => {
+    if (!activeProfile || !validityData[activeProfile]) return [];
+    return validityData[activeProfile];
+  }, [activeProfile, validityData]);
+
+  const activeProfileTotals = useMemo(() => {
+    let generated = 0;
+    let sold = 0;
+    let remaining = 0;
+    activeProfileTableData.forEach((row: any) => {
+      generated += row.generated;
+      sold += row.sold;
+      remaining += row.remaining;
+    });
+    return { generated, sold, remaining };
+  }, [activeProfileTableData]);
+
+  // Calculate totals for active Hotspot Profile table (Voucher Data / Hotspot)
+  const activeHotspotTableData = useMemo(() => {
+    if (!activeHotspotProfile || !hotspotData[activeHotspotProfile]) return [];
+    return hotspotData[activeHotspotProfile];
+  }, [activeHotspotProfile, hotspotData]);
+
+  const activeHotspotTotals = useMemo(() => {
+    let generated = 0;
+    let sold = 0;
+    let remaining = 0;
+    activeHotspotTableData.forEach((row: any) => {
+      generated += row.generated;
+      sold += row.sold;
+      remaining += row.remaining;
+    });
+    return { generated, sold, remaining };
+  }, [activeHotspotTableData]);
+
+  // Calculate totals for Payment Camp Report
+  const paymentCampTotals = useMemo(() => {
+    let salesCount = 0;
+    let totalAmount = 0;
+    paymentCampData.forEach(row => {
+      salesCount += row.salesCount;
+      totalAmount += row.totalAmount;
+    });
+    return { salesCount, totalAmount };
+  }, [paymentCampData]);
+
+  // Calculate totals for Payment User Report
+  const paymentUserTotals = useMemo(() => {
+    let salesCount = 0;
+    let totalAmount = 0;
+    paymentUserData.forEach(row => {
+      salesCount += row.salesCount;
+      totalAmount += row.totalAmount;
+    });
+    return { salesCount, totalAmount };
+  }, [paymentUserData]);
+
+  // Calculate totals for Users Sale Report
+  const userSaleTotals = useMemo(() => {
+    let salesCount = 0;
+    let salesAmount = 0;
+    userSaleData.forEach(row => {
+      salesCount += row.salesCount;
+      salesAmount += row.salesAmount;
+    });
+    return { salesCount, salesAmount };
+  }, [userSaleData]);
+
+  const paymentsTotals = useMemo(() => {
+    return paymentsList.reduce((sum, item) => sum + item.amount, 0);
+  }, [paymentsList]);
+
+  const collectedTotals = useMemo(() => {
+    return collectedList.reduce((sum, item) => sum + item.amount, 0);
+  }, [collectedList]);
+
+  const handleDropdownToggle = (e: React.MouseEvent, type: "sales" | "reports" | "masters" | "payments") => {
     e.stopPropagation();
     setActiveDropdown((prev) => (prev === type ? null : type));
   };
@@ -535,7 +1385,7 @@ export default function SalesReportDashboard() {
         <ul className="flex items-center gap-5 text-sm font-bold whitespace-nowrap overflow-visible">
           <li>
             <button 
-              onClick={() => setActiveTab("dashboard")} 
+              onClick={() => { setActiveTab("dashboard"); setActiveDropdown(null); }} 
               className={`flex items-center gap-2 px-3.5 py-1.5 rounded-md transition-all ${
                 activeTab === "dashboard" 
                   ? "text-[#1e3c72] bg-white/60 shadow-sm" 
@@ -592,19 +1442,44 @@ export default function SalesReportDashboard() {
             </span>
           </li>
           
-          <li>
-            <span className="flex items-center gap-2 px-3.5 py-1.5 text-slate-400 cursor-not-allowed opacity-50">
+          {/* Dropdown 2: Payments */}
+          <li className="relative overflow-visible">
+            <button 
+              onClick={(e) => handleDropdownToggle(e, "payments")} 
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-md transition-all ${
+                ["payments-list", "collected-payments"].includes(activeTab)
+                  ? "text-[#1e3c72] bg-white/60 shadow-sm" 
+                  : "text-[#4a6b82] hover:text-[#1e3c72]"
+              }`}
+            >
               <DollarSign className="h-4 w-4" />
               Payments
-            </span>
+              <ChevronDown className="h-3.5 w-3.5" />
+            </button>
+            {activeDropdown === "payments" && (
+              <div className="absolute top-full left-0 mt-1 bg-white border border-[#cfdbe6] rounded-md shadow-md min-w-[200px] z-50 flex flex-col py-1">
+                <button 
+                  onClick={() => { setActiveTab("payments-list"); setActiveDropdown(null); }}
+                  className="px-4 py-2 text-xs sm:text-sm font-semibold text-[#4a6b82] hover:text-[#1e3c72] hover:bg-[#bfebff]/30 text-left w-full transition-all"
+                >
+                  List Payments
+                </button>
+                <button 
+                  onClick={() => { setActiveTab("collected-payments"); setActiveDropdown(null); }}
+                  className="px-4 py-2 text-xs sm:text-sm font-semibold text-[#4a6b82] hover:text-[#1e3c72] hover:bg-[#bfebff]/30 text-left w-full transition-all"
+                >
+                  Collected Payments
+                </button>
+              </div>
+            )}
           </li>
           
-          {/* Dropdown 2: Reports */}
+          {/* Dropdown 3: Reports */}
           <li className="relative overflow-visible">
             <button 
               onClick={(e) => handleDropdownToggle(e, "reports")} 
               className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-md transition-all ${
-                activeTab === "agents"
+                ["voucher-validity", "voucher-hotspot", "payment-camp", "payment-user", "user-sale", "agents"].includes(activeTab)
                   ? "text-[#1e3c72] bg-white/60 shadow-sm" 
                   : "text-[#4a6b82] hover:text-[#1e3c72]"
               }`}
@@ -614,7 +1489,39 @@ export default function SalesReportDashboard() {
               <ChevronDown className="h-3.5 w-3.5" />
             </button>
             {activeDropdown === "reports" && (
-              <div className="absolute top-full left-0 mt-1 bg-white border border-[#cfdbe6] rounded-md shadow-md min-w-[200px] z-50 flex flex-col py-1">
+              <div className="absolute top-full left-0 mt-1 bg-white border border-[#cfdbe6] rounded-md shadow-md min-w-[240px] z-50 flex flex-col py-1">
+                <button 
+                  onClick={() => { setActiveTab("voucher-validity"); setActiveDropdown(null); }}
+                  className="px-4 py-2 text-xs sm:text-sm font-semibold text-[#4a6b82] hover:text-[#1e3c72] hover:bg-[#bfebff]/30 text-left w-full transition-all"
+                >
+                  Voucher Data / Validity
+                </button>
+                <button 
+                  onClick={() => { setActiveTab("voucher-hotspot"); setActiveDropdown(null); }}
+                  className="px-4 py-2 text-xs sm:text-sm font-semibold text-[#4a6b82] hover:text-[#1e3c72] hover:bg-[#bfebff]/30 text-left w-full transition-all"
+                >
+                  Voucher Data / Hotspot
+                </button>
+                <button 
+                  onClick={() => { setActiveTab("payment-camp"); setActiveDropdown(null); }}
+                  className="px-4 py-2 text-xs sm:text-sm font-semibold text-[#4a6b82] hover:text-[#1e3c72] hover:bg-[#bfebff]/30 text-left w-full transition-all"
+                >
+                  Payment - Camp Report
+                </button>
+                <button 
+                  onClick={() => { setActiveTab("payment-user"); setActiveDropdown(null); }}
+                  className="px-4 py-2 text-xs sm:text-sm font-semibold text-[#4a6b82] hover:text-[#1e3c72] hover:bg-[#bfebff]/30 text-left w-full transition-all"
+                >
+                  Payment - User Camp Report
+                </button>
+                <button 
+                  onClick={() => { setActiveTab("user-sale"); setActiveDropdown(null); }}
+                  className="px-4 py-2 text-xs sm:text-sm font-semibold text-[#4a6b82] hover:text-[#1e3c72] hover:bg-[#bfebff]/30 text-left w-full transition-all"
+                >
+                  User - Sales Report
+                </button>
+                
+                <div className="border-t border-slate-100 my-1"></div>
                 <button 
                   onClick={() => { setActiveTab("agents"); setActiveDropdown(null); }}
                   className="px-4 py-2 text-xs sm:text-sm font-semibold text-[#4a6b82] hover:text-[#1e3c72] hover:bg-[#bfebff]/30 text-left w-full transition-all"
@@ -625,12 +1532,12 @@ export default function SalesReportDashboard() {
             )}
           </li>
 
-          {/* Dropdown 3: Masters */}
+          {/* Dropdown 4: Masters */}
           <li className="relative overflow-visible">
             <button 
               onClick={(e) => handleDropdownToggle(e, "masters")} 
               className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-md transition-all ${
-                activeTab === "pricing"
+                ["companies", "camps", "validity-profiles", "camp-validity-pricing", "notifications", "pricing"].includes(activeTab)
                   ? "text-[#1e3c72] bg-white/60 shadow-sm" 
                   : "text-[#4a6b82] hover:text-[#1e3c72]"
               }`}
@@ -640,7 +1547,39 @@ export default function SalesReportDashboard() {
               <ChevronDown className="h-3.5 w-3.5" />
             </button>
             {activeDropdown === "masters" && (
-              <div className="absolute top-full left-0 mt-1 bg-white border border-[#cfdbe6] rounded-md shadow-md min-w-[200px] z-50 flex flex-col py-1">
+              <div className="absolute top-full left-0 mt-1 bg-white border border-[#cfdbe6] rounded-md shadow-md min-w-[220px] z-50 flex flex-col py-1">
+                <button 
+                  onClick={() => { setActiveTab("companies"); setActiveDropdown(null); }}
+                  className="px-4 py-2 text-xs sm:text-sm font-semibold text-[#4a6b82] hover:text-[#1e3c72] hover:bg-[#bfebff]/30 text-left w-full transition-all"
+                >
+                  Companies
+                </button>
+                <button 
+                  onClick={() => { setActiveTab("camps"); setActiveDropdown(null); }}
+                  className="px-4 py-2 text-xs sm:text-sm font-semibold text-[#4a6b82] hover:text-[#1e3c72] hover:bg-[#bfebff]/30 text-left w-full transition-all"
+                >
+                  Camps
+                </button>
+                <button 
+                  onClick={() => { setActiveTab("validity-profiles"); setActiveDropdown(null); }}
+                  className="px-4 py-2 text-xs sm:text-sm font-semibold text-[#4a6b82] hover:text-[#1e3c72] hover:bg-[#bfebff]/30 text-left w-full transition-all"
+                >
+                  Validity Profiles
+                </button>
+                <button 
+                  onClick={() => { setActiveTab("camp-validity-pricing"); setActiveDropdown(null); }}
+                  className="px-4 py-2 text-xs sm:text-sm font-semibold text-[#4a6b82] hover:text-[#1e3c72] hover:bg-[#bfebff]/30 text-left w-full transition-all"
+                >
+                  Camp Profiles
+                </button>
+                <button 
+                  onClick={() => { setActiveTab("notifications"); setActiveDropdown(null); }}
+                  className="px-4 py-2 text-xs sm:text-sm font-semibold text-[#4a6b82] hover:text-[#1e3c72] hover:bg-[#bfebff]/30 text-left w-full transition-all"
+                >
+                  Notifications
+                </button>
+                
+                <div className="border-t border-slate-100 my-1"></div>
                 <button 
                   onClick={() => { setActiveTab("pricing"); setActiveDropdown(null); }}
                   className="px-4 py-2 text-xs sm:text-sm font-semibold text-[#4a6b82] hover:text-[#1e3c72] hover:bg-[#bfebff]/30 text-left w-full transition-all"
@@ -663,6 +1602,18 @@ export default function SalesReportDashboard() {
             {activeTab === "voucher-sales" && "Voucher Sales"}
             {activeTab === "monthly-sales" && "Monthly Voucher Sales"}
             {activeTab === "sales-chart" && "Camps - Monthly Voucher Sales"}
+            {activeTab === "voucher-validity" && "Voucher Data [ Validity ]"}
+            {activeTab === "voucher-hotspot" && "Voucher Data [ Hotspot ]"}
+            {activeTab === "payment-camp" && "Payment Camp Report"}
+            {activeTab === "payment-user" && "Payment User Report"}
+            {activeTab === "user-sale" && "Users Sale Report"}
+            {activeTab === "companies" && "Companies Master"}
+            {activeTab === "camps" && "Camps Master"}
+            {activeTab === "validity-profiles" && "Validity Profiles Master"}
+            {activeTab === "camp-validity-pricing" && "Camp Profiles Master"}
+            {activeTab === "notifications" && "Notifications Master"}
+            {activeTab === "payments-list" && "Payments Log"}
+            {activeTab === "collected-payments" && "Collected Payments"}
             {activeTab === "agents" && "Agent Performance Leaderboard"}
             {activeTab === "pricing" && "Pricing Settings"}
           </h3>
@@ -853,7 +1804,7 @@ export default function SalesReportDashboard() {
                   type="submit" 
                   className="bg-[#3958b2] hover:bg-[#2d468f] text-white font-bold px-5 py-2.5 rounded-lg flex items-center gap-1.5 transition-all shadow-sm text-sm w-full justify-center"
                 >
-                  <Search className="h-4 w-4" />
+                  <Search className="h-4.5 w-4.5" />
                   Search
                 </button>
               </div>
@@ -961,738 +1912,1007 @@ export default function SalesReportDashboard() {
           </section>
         )}
 
-        {/* ── TAB CONTENT: DASHBOARD ─────────────────────────────────────── */}
-        {activeTab === "dashboard" && (
-          <div className="space-y-6 flex-1 flex flex-col">
-            
-            {/* Top Row Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+        {/* ── 4. FILTER BAR (Voucher Data [Validity] & [Hotspot] Reports) ──── */}
+        {["voucher-validity", "voucher-hotspot"].includes(activeTab) && (
+          <section className="bg-white border border-[#cfdbe6] rounded-xl p-5 mb-6 shadow-sm">
+            <form onSubmit={handleSearchSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4 items-end">
               
-              {/* Card 1: Outstanding Balance */}
-              <div className="md:col-span-4 bg-gradient-to-br from-[#35bccc] to-[#3958b2] text-white rounded-xl p-6 shadow-md relative overflow-hidden group min-h-[140px]">
-                <div className="absolute -right-3 -bottom-5 opacity-10 group-hover:scale-110 transition-transform duration-300">
-                  <Coins className="h-28 w-28 text-white" />
-                </div>
-                <div className="text-xs uppercase font-bold tracking-widest opacity-85 mb-1.5 flex justify-between items-center">
-                  <span>Outstanding Balance</span>
-                  <DollarSign className="h-4.5 w-4.5" />
-                </div>
-                
-                <div className="flex items-baseline gap-1.5 mb-4">
-                  <span className="text-xs font-bold">AED</span>
-                  <span className="text-2xl sm:text-3xl font-black tracking-tight leading-none">
-                    {summaryData?.summary.totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"}
-                  </span>
-                  
-                  <div className="ml-auto bg-white/20 px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap">
-                    AED 0.00 Pending
+              {/* Search Keyword */}
+              <div className="lg:col-span-3">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Search Keyword</label>
+                <input 
+                  type="text" 
+                  placeholder="Search Here" 
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 placeholder-slate-400 transition-all"
+                />
+              </div>
+
+              {/* Date Filters */}
+              <div className="lg:col-span-4 grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Start Date</label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <input 
+                      type="date" 
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                      className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 pl-10 pr-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 transition-all"
+                    />
                   </div>
                 </div>
-
-                <div className="text-[10px] font-bold opacity-80 pt-2 border-t border-white/20">
-                  Last Update: Today's Sync
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">End Date</label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <input 
+                      type="date" 
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 pl-10 pr-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 transition-all"
+                    />
+                  </div>
                 </div>
               </div>
 
-              {/* Card 2: Today's Sale */}
-              <div className="md:col-span-4 bg-gradient-to-br from-[#26b048] to-[#c9d668] text-white rounded-xl p-6 shadow-md relative overflow-hidden group min-h-[140px]">
-                <div className="absolute -right-3 -bottom-5 opacity-10 group-hover:scale-110 transition-transform duration-300">
-                  <TrendingUp className="h-28 w-28 text-white" />
-                </div>
-                <div className="text-xs uppercase font-bold tracking-widest opacity-85 mb-1.5 flex justify-between items-center">
-                  <span>Today's Sale</span>
-                  <TrendingUp className="h-4.5 w-4.5" />
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 mb-4">
-                  <div>
-                    <span className="text-[9px] uppercase font-bold opacity-75 block">Sale Amount</span>
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-xs font-bold">AED</span>
-                      <span className="text-xl sm:text-2xl font-black tracking-tight leading-none">
-                        {summaryData?.comparison.today.revenue.toLocaleString() || "0.00"}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-[9px] uppercase font-bold opacity-75 block">Count</span>
-                    <div className="flex items-baseline gap-1 justify-end">
-                      <span className="text-xl sm:text-2xl font-black tracking-tight leading-none">
-                        {summaryData?.comparison.today.sales || "0"}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="text-[10px] font-bold opacity-80 pt-2 border-t border-white/20">
-                  Last Sale Time: {summaryData?.trends && summaryData.trends.length > 0 ? "Today" : "No sales"}
-                </div>
+              {/* Sort by */}
+              <div className="lg:col-span-3">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Sort by</label>
+                {activeTab === "voucher-validity" ? (
+                  <select 
+                    value={reportSortBy}
+                    onChange={(e) => setReportSortBy(e.target.value)}
+                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 cursor-pointer"
+                  >
+                    <option value="">Select from list</option>
+                    <option value="validityProfile asc">Validity A-Z</option>
+                    <option value="validityProfile desc">Validity Z-A</option>
+                  </select>
+                ) : (
+                  <select 
+                    value={hotspotSortBy}
+                    onChange={(e) => setHotspotSortBy(e.target.value)}
+                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 cursor-pointer"
+                  >
+                    <option value="">Select from list</option>
+                    <option value="hotspotName asc">Hotspot A-Z</option>
+                    <option value="hotspotName desc">Hotspot Z-A</option>
+                  </select>
+                )}
               </div>
 
-              {/* Card 3: Collection */}
-              <div className="md:col-span-4 bg-gradient-to-br from-[#ffbc36] to-[#ff6228] text-white rounded-xl p-6 shadow-md relative overflow-hidden group min-h-[140px]">
-                <div className="absolute -right-3 -bottom-5 opacity-10 group-hover:scale-110 transition-transform duration-300">
-                  <DollarSign className="h-28 w-28 text-white" />
-                </div>
-                <div className="text-xs uppercase font-bold tracking-widest opacity-85 mb-1.5 flex justify-between items-center">
-                  <span>Collection Details</span>
-                  <DollarSign className="h-4.5 w-4.5" />
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 mb-4">
-                  <div>
-                    <div className="flex items-baseline gap-0.5">
-                      <span className="text-[10px] font-bold">AED</span>
-                      <span className="text-xl font-black tracking-tight leading-none">
-                        {summaryData?.comparison.today.revenue.toLocaleString(undefined, { minimumFractionDigits: 2 }) || "0.00"}
-                      </span>
-                    </div>
-                    <span className="text-[9px] font-bold opacity-90 block mt-1">Today's Collection</span>
-                  </div>
-                  
-                  <div className="border-l border-white/25 pl-3">
-                    <div className="flex items-baseline gap-0.5">
-                      <span className="text-[10px] font-bold">AED</span>
-                      <span className="text-xl font-black tracking-tight leading-none">
-                        {summaryData?.summary.totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 }) || "0"}
-                      </span>
-                    </div>
-                    <span className="text-[9px] font-bold opacity-90 block mt-1">Monthly Collection</span>
-                  </div>
-                </div>
-
-                <div className="text-[10px] font-bold opacity-80 pt-2 border-t border-white/20">
-                  Last Update: Sync Completed
-                </div>
+              {/* Search Action button */}
+              <div className="lg:col-span-2">
+                <button 
+                  type="submit" 
+                  className="bg-[#3958b2] hover:bg-[#2d468f] text-white font-bold px-5 py-2.5 rounded-lg flex items-center gap-1.5 transition-all shadow-sm text-sm w-full justify-center"
+                >
+                  <Search className="h-4 w-4" />
+                  Search
+                </button>
               </div>
 
-            </div>
-
-            {/* Middle Row Section */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-2">
-              
-              {/* Left Panel: Agent Analysis */}
-              <div className="lg:col-span-5 bg-white border border-[#cfdbe6] rounded-xl p-5 shadow-sm flex flex-col">
-                <div className="flex justify-between items-center pb-3 mb-4 border-b border-slate-100">
-                  <h4 className="text-sm font-black text-slate-700 uppercase tracking-wider">
-                    Agent - Monthly Sales Analysis
-                  </h4>
-                  <div className="text-xs text-slate-500 font-bold bg-slate-100 px-2 py-1 rounded">
-                    {startDate.substring(5, 7) || "08"}-{startDate.substring(0, 4) || "2026"}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-12 text-[10px] font-black text-slate-400 uppercase tracking-widest pb-2 border-b border-slate-100">
-                  <div className="col-span-5">Agent</div>
-                  <div className="col-span-3 text-right">Prev Count</div>
-                  <div className="col-span-2 text-right">Sales</div>
-                  <div className="col-span-2 text-right">Amount</div>
-                </div>
-
-                <div className="flex-1 divide-y divide-slate-100 max-h-[220px] overflow-y-auto pr-1">
-                  {loadingSummary ? (
-                    <div className="py-10 text-center">
-                      <RefreshCw className="h-5 w-5 animate-spin text-slate-400 mx-auto" />
-                    </div>
-                  ) : summaryData?.agents && summaryData.agents.length > 0 ? (
-                    summaryData.agents.map((agent) => (
-                      <div 
-                        key={agent.name} 
-                        onClick={() => {
-                          setSelectedAgent(agent.name);
-                          setActiveTab("voucher-sales");
-                        }}
-                        className="grid grid-cols-12 items-center py-2.5 hover:bg-slate-50 rounded-lg px-1 transition-all cursor-pointer text-xs"
-                      >
-                        <div className="col-span-5 font-bold text-slate-700 flex items-center gap-2">
-                          <span className="w-2.5 h-2.5 rounded-full bg-[#3958b2]/20 text-[#3958b2] flex items-center justify-center font-bold text-[8px]">
-                            A
-                          </span>
-                          <span className="truncate">{agent.name}</span>
-                        </div>
-                        <div className="col-span-3 text-right font-semibold text-slate-400">
-                          {Math.round(agent.salesCount * 0.9) || 0}
-                        </div>
-                        <div className="col-span-2 text-right font-extrabold text-slate-600">
-                          {agent.salesCount}
-                        </div>
-                        <div className="col-span-2 text-right font-black text-[#3958b2]">
-                          AED {agent.revenue}
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="py-10 text-center text-slate-400 text-xs italic">
-                      No agent records to display.
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Right Panel: Carousel and Monthly stats */}
-              <div className="lg:col-span-7 grid grid-cols-1 md:grid-cols-2 gap-6">
-                
-                {/* 1. Today Sale Slider Card */}
-                <div className="bg-gradient-to-br from-[#f53e3b] to-[#ad27a7] text-white rounded-xl p-5 shadow-md flex flex-col justify-between relative overflow-hidden group min-h-[160px]">
-                  <div className="absolute -right-3 -bottom-5 opacity-10 group-hover:scale-110 transition-transform duration-300">
-                    <TrendingUp className="h-24 w-24 text-white" />
-                  </div>
-                  
-                  <div className="text-xs uppercase font-bold tracking-widest pb-2 border-b border-white/20 flex justify-between items-center">
-                    <span>Today's Sales Leader</span>
-                    <TrendingUp className="h-4 w-4" />
-                  </div>
-
-                  {carouselItems.length > 0 ? (
-                    <div className="py-3 flex-1 flex flex-col justify-center">
-                      <div className="font-extrabold text-lg tracking-wide">
-                        {carouselItems[carouselIndex]?.name}
-                      </div>
-                      <div className="text-xs font-semibold mt-1 opacity-90">
-                        Sale Amount: <span className="font-black text-white bg-white/20 px-1.5 py-0.5 rounded">AED {carouselItems[carouselIndex]?.revenue}</span>
-                      </div>
-                      
-                      <div className="text-xs font-semibold mt-2">
-                        Vouchers Count: <span className="font-bold">{carouselItems[carouselIndex]?.salesCount}</span>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="py-4 text-center text-xs opacity-75 italic flex-1 flex items-center justify-center">
-                      No agent sales log found.
-                    </div>
-                  )}
-
-                  <div className="flex gap-1.5 justify-center mt-2">
-                    {carouselItems.map((_, i) => (
-                      <button 
-                        key={i} 
-                        onClick={() => setCarouselIndex(i)}
-                        className={`w-1.5 h-1.5 rounded-full transition-all ${carouselIndex === i ? "bg-white scale-125" : "bg-white/40"}`}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                {/* 2. This Month Sales */}
-                <div className="bg-gradient-to-br from-[#c1129f] via-[#af31da] to-[#862beb] text-white rounded-xl p-5 shadow-md flex flex-col justify-between relative overflow-hidden group min-h-[160px]">
-                  <div className="absolute -right-3 -bottom-5 opacity-10 group-hover:scale-110 transition-transform duration-300">
-                    <Coins className="h-24 w-24 text-white" />
-                  </div>
-
-                  <div className="text-xs uppercase font-bold tracking-widest opacity-85 pb-2 border-b border-white/20 flex justify-between items-center">
-                    <span>This Month Sales</span>
-                    <Coins className="h-4 w-4" />
-                  </div>
-
-                  <div className="py-2.5 flex-1 flex flex-col justify-center gap-1.5">
-                    <div>
-                      <span className="text-[10px] opacity-75 font-semibold uppercase block">Amount</span>
-                      <span className="text-xl font-black">AED {summaryData?.summary.totalRevenue || 0}</span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] opacity-75 font-semibold uppercase block">Count</span>
-                      <span className="text-base font-bold">{summaryData?.summary.totalSales || 0} vouchers</span>
-                    </div>
-                  </div>
-
-                  <div className="text-[9px] font-bold opacity-80">
-                    Last Update: Today's Sync
-                  </div>
-                </div>
-
-                {/* 3. Last Month Sale & Collection */}
-                <div className="md:col-span-2 bg-gradient-to-br from-[#35bccc] to-[#3958b2] text-white rounded-xl p-5 shadow-md flex flex-col relative overflow-hidden group">
-                  <div className="absolute -right-3 -bottom-5 opacity-10">
-                    <Layers className="h-28 w-28 text-white" />
-                  </div>
-
-                  <div className="grid grid-cols-2 divide-x divide-white/25">
-                    <div className="pr-4 py-1.5">
-                      <span className="text-xs font-black uppercase tracking-wider opacity-85 block mb-2">Last Month Sale</span>
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="text-xs opacity-75">AED</span>
-                        <span className="text-xl font-black">
-                          {summaryData?.summary.totalRevenue ? Math.round(summaryData.summary.totalRevenue * 1.3).toLocaleString() : "55,328"}
-                        </span>
-                      </div>
-                      <div className="text-xs font-semibold mt-1.5">
-                        Count: <span className="font-bold">{summaryData?.summary.totalSales ? Math.round(summaryData.summary.totalSales * 1.3) : "1,729"}</span>
-                      </div>
-                      <div className="text-[9px] opacity-75 mt-3 font-bold">Updated: End of Month</div>
-                    </div>
-
-                    <div className="pl-6 py-1.5">
-                      <span className="text-xs font-black uppercase tracking-wider opacity-85 block mb-2">Last Month Collection</span>
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="text-xs opacity-75">AED</span>
-                        <span className="text-xl font-black">0.00</span>
-                      </div>
-                      <div className="text-xs font-semibold mt-1.5">
-                        Count: <span className="font-bold">0.00</span>
-                      </div>
-                      <div className="text-[9px] opacity-75 mt-3 font-bold">Updated: End of Month</div>
-                    </div>
-                  </div>
-                </div>
-
-              </div>
-            </div>
-
-            {/* Recharts Analytics Preview */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-2">
-              <div className="lg:col-span-8 bg-white border border-[#cfdbe6] rounded-xl p-5 shadow-sm flex flex-col h-[300px]">
-                <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider mb-4 flex items-center gap-2">
-                  <TrendingUp className="h-4.5 w-4.5 text-[#3958b2]" />
-                  Sales Volume & Revenue Trend
-                </h4>
-                <div className="flex-1 min-h-0">
-                  {summaryData?.trends && summaryData.trends.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={summaryData.trends} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                        <defs>
-                          <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#3958b2" stopOpacity={0.25}/>
-                            <stop offset="95%" stopColor="#3958b2" stopOpacity={0}/>
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                        <XAxis dataKey="date" stroke="#64748b" fontSize={11} tickLine={false} />
-                        <YAxis stroke="#64748b" fontSize={11} tickLine={false} />
-                        <Tooltip contentStyle={{ backgroundColor: "#ffffff", borderColor: "#cfdbe6", borderRadius: "8px" }} />
-                        <Area type="monotone" dataKey="revenue" name="Revenue (AED)" stroke="#3958b2" strokeWidth={2.5} fillOpacity={1} fill="url(#colorRevenue)" />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="h-full flex items-center justify-center text-slate-400 text-sm italic">
-                      No trend data available.
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="lg:col-span-4 bg-white border border-[#cfdbe6] rounded-xl p-5 shadow-sm flex flex-col h-[300px]">
-                <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider mb-4 flex items-center gap-2">
-                  <Layers className="h-4.5 w-4.5 text-[#ad27a7]" />
-                  Internet Packages Share
-                </h4>
-                <div className="flex-1 min-h-0 flex flex-col justify-center">
-                  {summaryData?.plans && summaryData.plans.length > 0 ? (
-                    <div className="flex flex-col items-center justify-center gap-3">
-                      <div className="h-32 w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie
-                              data={summaryData.plans}
-                              cx="50%"
-                              cy="50%"
-                              innerRadius={45}
-                              outerRadius={60}
-                              paddingAngle={3}
-                              dataKey="count"
-                              nameKey="planName"
-                            >
-                              {summaryData.plans.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                              ))}
-                            </Pie>
-                            <Tooltip contentStyle={{ backgroundColor: "#ffffff", borderColor: "#cfdbe6" }} />
-                          </PieChart>
-                        </ResponsiveContainer>
-                      </div>
-                      
-                      <div className="grid grid-cols-2 gap-1 text-[10px] w-full px-2">
-                        {summaryData.plans.map((entry, index) => (
-                          <div key={entry.planName} className="flex items-center gap-1.5">
-                            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COLORS[index % COLORS.length] }}></span>
-                            <span className="text-slate-600 font-semibold truncate">{entry.planName} ({entry.count})</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="h-full flex items-center justify-center text-slate-400 text-sm italic">
-                      No plan shares recorded.
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-          </div>
+            </form>
+          </section>
         )}
 
+        {/* ── 5. FILTER BAR (Payment Camp & Payment User Reports) ─────────── */}
+        {["payment-camp", "payment-user"].includes(activeTab) && (
+          <section className="bg-white border border-[#cfdbe6] rounded-xl p-5 mb-6 shadow-sm">
+            <form onSubmit={handleSearchSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4 items-end">
+              
+              {/* Search Keyword */}
+              <div className="lg:col-span-3">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Search Keyword</label>
+                <input 
+                  type="text" 
+                  placeholder={activeTab === "payment-user" ? "Type Name or Amount" : "Search Here"} 
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 placeholder-slate-400 transition-all"
+                />
+              </div>
+
+              {/* Date Filters */}
+              <div className="lg:col-span-4 grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Start Date</label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <input 
+                      type="date" 
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                      className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 pl-10 pr-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 transition-all"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">End Date</label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <input 
+                      type="date" 
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 pl-10 pr-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 transition-all"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Camp Filter for Payment User Report */}
+              {activeTab === "payment-user" && (
+                <div className="lg:col-span-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Camp</label>
+                  <select 
+                    value={selectedCampFilter}
+                    onChange={(e) => setSelectedCampFilter(e.target.value)}
+                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 cursor-pointer"
+                  >
+                    <option value="all">-- All Camps --</option>
+                    {campList.map(camp => (
+                      <option key={camp} value={camp}>{camp}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Entries count limit */}
+              <div className="lg:col-span-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Show By</label>
+                <select 
+                  value={entriesLimit}
+                  onChange={(e) => setEntriesLimit(Number(e.target.value))}
+                  className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 cursor-pointer"
+                >
+                  <option value={10}>10 entries</option>
+                  <option value={25}>25 entries</option>
+                  <option value={50}>50 entries</option>
+                  <option value={100}>100 entries</option>
+                  <option value={1000}>1000 entries</option>
+                </select>
+              </div>
+
+              {/* Search button */}
+              <div className="lg:col-span-1">
+                <button 
+                  type="submit" 
+                  className="bg-[#3958b2] hover:bg-[#2d468f] text-white font-bold p-2.5 rounded-lg flex items-center justify-center transition-all shadow-sm text-sm w-full"
+                >
+                  <Search className="h-4.5 w-4.5" />
+                </button>
+              </div>
+
+            </form>
+          </section>
+        )}
+
+        {/* ── 6. FILTER BAR (Users Sale Report) ───────────────────────────── */}
+        {activeTab === "user-sale" && (
+          <section className="bg-white border border-[#cfdbe6] rounded-xl p-5 mb-6 shadow-sm">
+            <form onSubmit={handleSearchSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4 items-end">
+              
+              {/* Search Keyword */}
+              <div className="lg:col-span-3">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Search Keyword</label>
+                <input 
+                  type="text" 
+                  placeholder="Type something..." 
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 placeholder-slate-400 transition-all"
+                />
+              </div>
+
+              {/* User Selector */}
+              <div className="lg:col-span-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">User</label>
+                <select 
+                  value={selectedAgent}
+                  onChange={(e) => setSelectedAgent(e.target.value)}
+                  className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 cursor-pointer"
+                >
+                  <option value="all">-- Select User --</option>
+                  {summaryData?.agents.map(a => (
+                    <option key={a.name} value={a.name}>{a.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Company Selector */}
+              <div className="lg:col-span-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Company</label>
+                <select 
+                  className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 cursor-pointer"
+                >
+                  <option value="all">-- Select Company --</option>
+                  <option value="1">Apricom DXB</option>
+                </select>
+              </div>
+
+              {/* Camp Selector */}
+              <div className="lg:col-span-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Camp</label>
+                <select 
+                  value={selectedRouter}
+                  onChange={(e) => setSelectedRouter(e.target.value)}
+                  className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 cursor-pointer"
+                >
+                  <option value="all">-- Select Camp --</option>
+                  {campList.map(camp => (
+                    <option key={camp} value={camp}>{camp}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Actions */}
+              <div className="lg:col-span-3 flex gap-2">
+                <button 
+                  type="submit" 
+                  className="bg-[#3958b2] hover:bg-[#2d468f] text-white font-bold px-4 py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all shadow-sm text-sm flex-1"
+                >
+                  <Search className="h-4 w-4" />
+                  Search
+                </button>
+                
+                <button 
+                  type="button"
+                  onClick={resetFilters}
+                  className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded-lg text-sm font-bold transition-all border border-slate-300 flex-1"
+                >
+                  Reset
+                </button>
+              </div>
+
+            </form>
+          </section>
+        )}
+
+        {/* ── 7. FILTER BAR (Companies Master) ────────────────────────────── */}
+        {activeTab === "companies" && (
+          <section className="bg-white border border-[#cfdbe6] rounded-xl p-5 mb-6 shadow-sm">
+            <div className="flex flex-col sm:flex-row gap-4 items-end justify-between">
+              
+              <div className="flex-1 grid grid-cols-1 sm:grid-cols-12 gap-4 w-full">
+                {/* Search Keyword */}
+                <div className="sm:col-span-4">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Search Keyword</label>
+                  <input 
+                    type="text" 
+                    placeholder="Search Here" 
+                    value={companySearch}
+                    onChange={(e) => setCompanySearch(e.target.value)}
+                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 placeholder-slate-400 transition-all"
+                  />
+                </div>
+
+                {/* Sort by */}
+                <div className="sm:col-span-4">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Sort by</label>
+                  <select 
+                    value={companySortBy}
+                    onChange={(e) => setCompanySortBy(e.target.value)}
+                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 cursor-pointer"
+                  >
+                    <option value="">Select from list</option>
+                    <option value="name.asc">Name A-Z</option>
+                    <option value="name.desc">Name Z-A</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Add New Button */}
+              <button 
+                type="button"
+                onClick={() => { setEditCompany({ name: "" }); setIsCompanyModalOpen(true); }}
+                className="bg-[#3958b2] hover:bg-[#2d468f] text-white font-bold px-5 py-2.5 rounded-lg flex items-center gap-1.5 transition-all shadow-md text-sm shrink-0"
+              >
+                <Plus className="h-4.5 w-4.5" />
+                New
+              </button>
+
+            </div>
+          </section>
+        )}
+
+        {/* ── 8. FILTER BAR (Camps Master) ────────────────────────────────── */}
+        {activeTab === "camps" && (
+          <section className="bg-white border border-[#cfdbe6] rounded-xl p-5 mb-6 shadow-sm">
+            <div className="flex flex-col lg:flex-row gap-4 items-end justify-between">
+              
+              <div className="flex-1 grid grid-cols-1 sm:grid-cols-12 gap-4 w-full">
+                {/* Search Keyword */}
+                <div className="sm:col-span-3">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Search Keyword</label>
+                  <input 
+                    type="text" 
+                    placeholder="Search Here" 
+                    value={campSearch}
+                    onChange={(e) => setCampSearch(e.target.value)}
+                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 placeholder-slate-400 transition-all"
+                  />
+                </div>
+
+                {/* Company filter */}
+                <div className="sm:col-span-3">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Company</label>
+                  <select 
+                    value={campCompanyFilter}
+                    onChange={(e) => setCampCompanyFilter(e.target.value)}
+                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 cursor-pointer"
+                  >
+                    <option value="all">-- All Companies --</option>
+                    <option value="Apricom DXB">Apricom DXB</option>
+                    <option value="Apricom KSA">Apricom KSA</option>
+                  </select>
+                </div>
+
+                {/* Sort by */}
+                <div className="sm:col-span-3">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Sort by</label>
+                  <select 
+                    value={campSortBy}
+                    onChange={(e) => setCampSortBy(e.target.value)}
+                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 cursor-pointer"
+                  >
+                    <option value="">-- Select --</option>
+                    <option value="ASC">Name A-Z</option>
+                    <option value="DESC">Name Z-A</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Add New Button */}
+              <button 
+                type="button"
+                onClick={() => { setEditCamp({ name: "", company_name: "Apricom DXB", hotspot_name: "", strength: 500 }); setIsCampModalOpen(true); }}
+                className="bg-[#3958b2] hover:bg-[#2d468f] text-white font-bold px-5 py-2.5 rounded-lg flex items-center gap-1.5 transition-all shadow-md text-sm shrink-0 w-full lg:w-auto justify-center"
+              >
+                <Plus className="h-4.5 w-4.5" />
+                New
+              </button>
+
+            </div>
+          </section>
+        )}
+
+        {/* ── 9. FILTER BAR (Validity Profiles Master) ────────────────────── */}
+        {activeTab === "validity-profiles" && (
+          <section className="bg-white border border-[#cfdbe6] rounded-xl p-5 mb-6 shadow-sm">
+            <div className="flex flex-col sm:flex-row gap-4 items-end justify-between">
+              
+              <div className="flex-1 grid grid-cols-1 sm:grid-cols-12 gap-4 w-full">
+                {/* Search Keyword */}
+                <div className="sm:col-span-4">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Search Keyword</label>
+                  <input 
+                    type="text" 
+                    placeholder="Search Here" 
+                    value={vpSearch}
+                    onChange={(e) => setVpSearch(e.target.value)}
+                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 placeholder-slate-400 transition-all"
+                  />
+                </div>
+
+                {/* Sort by */}
+                <div className="sm:col-span-4">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Sort by</label>
+                  <select 
+                    value={vpSortBy}
+                    onChange={(e) => setVpSortBy(e.target.value)}
+                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 cursor-pointer"
+                  >
+                    <option value="">Select from list</option>
+                    <option value="name">Name</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Add New Button */}
+              <button 
+                type="button"
+                onClick={() => { setEditVp({ name: "" }); setIsVpModalOpen(true); }}
+                className="bg-[#3958b2] hover:bg-[#2d468f] text-white font-bold px-5 py-2.5 rounded-lg flex items-center gap-1.5 transition-all shadow-md text-sm shrink-0"
+              >
+                <Plus className="h-4.5 w-4.5" />
+                New
+              </button>
+
+            </div>
+          </section>
+        )}
+
+        {/* ── 10. FILTER BAR (Camp Profiles Master) ────────────────────────── */}
+        {activeTab === "camp-validity-pricing" && (
+          <section className="bg-white border border-[#cfdbe6] rounded-xl p-5 mb-6 shadow-sm">
+            <div className="flex flex-col lg:flex-row gap-4 items-end justify-between">
+              
+              <div className="flex-1 grid grid-cols-1 sm:grid-cols-12 gap-4 w-full">
+                {/* Search Keyword */}
+                <div className="sm:col-span-3">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Search Keyword</label>
+                  <input 
+                    type="text" 
+                    placeholder="Search Here" 
+                    value={cvpSearch}
+                    onChange={(e) => setCvpSearch(e.target.value)}
+                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 placeholder-slate-400 transition-all"
+                  />
+                </div>
+
+                {/* Camp selector */}
+                <div className="sm:col-span-3">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Camps</label>
+                  <select 
+                    value={cvpCampFilter}
+                    onChange={(e) => setCvpCampFilter(e.target.value)}
+                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 cursor-pointer"
+                  >
+                    <option value="all">-- All Camps --</option>
+                    {campList.map(camp => (
+                      <option key={camp} value={camp}>{camp}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Sort by */}
+                <div className="sm:col-span-3">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Sort by</label>
+                  <select 
+                    value={cvpSortBy}
+                    onChange={(e) => setCvpSortBy(e.target.value)}
+                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 cursor-pointer"
+                  >
+                    <option value="">-- Select --</option>
+                    <option value="camps.campName ASC">Camp Name A-Z</option>
+                    <option value="camps.campName DESC">Camp Name Z-A</option>
+                    <option value="vp.profileValidityName ASC">Validity A-Z</option>
+                    <option value="vp.profileValidityName DESC">Validity Z-A</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Add New Button */}
+              <button 
+                type="button"
+                onClick={() => { setEditCvp({ camp_name: "APM-DXB-camp-1", validity_name: "30-Days", company_name: "Apricom DXB", price: 32 }); setIsCvpModalOpen(true); }}
+                className="bg-[#3958b2] hover:bg-[#2d468f] text-white font-bold px-5 py-2.5 rounded-lg flex items-center gap-1.5 transition-all shadow-md text-sm shrink-0 w-full lg:w-auto justify-center"
+              >
+                <Plus className="h-4.5 w-4.5" />
+                New
+              </button>
+
+            </div>
+          </section>
+        )}
+
+        {/* ── 11. FILTER BAR (Notifications Master) ───────────────────────── */}
+        {activeTab === "notifications" && (
+          <section className="bg-white border border-[#cfdbe6] rounded-xl p-5 mb-6 shadow-sm">
+            <div className="flex flex-col sm:flex-row gap-4 items-end justify-between">
+              
+              <div className="flex-1 grid grid-cols-1 sm:grid-cols-12 gap-4 w-full">
+                {/* Search Keyword */}
+                <div className="sm:col-span-4">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Search Keyword</label>
+                  <input 
+                    type="text" 
+                    placeholder="Search Here" 
+                    value={notifSearch}
+                    onChange={(e) => setNotifSearch(e.target.value)}
+                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 placeholder-slate-400 transition-all"
+                  />
+                </div>
+
+                {/* Sort by */}
+                <div className="sm:col-span-4">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Sort by</label>
+                  <select 
+                    value={notifSortBy}
+                    onChange={(e) => setNotifSortBy(e.target.value)}
+                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 cursor-pointer"
+                  >
+                    <option value="">Select from list</option>
+                    <option value="n.id DESC">Time (Newest First)</option>
+                    <option value="n.id ASC">Time (Oldest First)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Add New Button */}
+              <button 
+                type="button"
+                onClick={() => { setEditNotif({ camp_name: "APM-RIMAL-1", user_name: "admin", category: "System Alert", message: "" }); setIsNotifModalOpen(true); }}
+                className="bg-[#3958b2] hover:bg-[#2d468f] text-white font-bold px-5 py-2.5 rounded-lg flex items-center gap-1.5 transition-all shadow-md text-sm shrink-0"
+              >
+                <Plus className="h-4.5 w-4.5" />
+                New
+              </button>
+
+            </div>
+          </section>
+        )}
+
+        {/* ── 12. FILTER BAR (Payments Log / List Payments) ───────────────── */}
+        {activeTab === "payments-list" && (
+          <section className="bg-white border border-[#cfdbe6] rounded-xl p-5 mb-6 shadow-sm">
+            <form onSubmit={(e) => { e.preventDefault(); fetchPayments(); }} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4 items-end">
+              
+              {/* Keyword Search */}
+              <div className="lg:col-span-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Search Keyword</label>
+                <input 
+                  type="text" 
+                  placeholder="Search Here" 
+                  value={paymentSearch}
+                  onChange={(e) => setPaymentSearch(e.target.value)}
+                  className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 placeholder-slate-400 transition-all"
+                />
+              </div>
+
+              {/* Date range filters */}
+              <div className="lg:col-span-4 grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Start Date</label>
+                  <input 
+                    type="date" 
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">End Date</label>
+                  <input 
+                    type="date" 
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 transition-all"
+                  />
+                </div>
+              </div>
+
+              {/* Year | Month selection */}
+              <div className="lg:col-span-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Paid Year | Month</label>
+                <input 
+                  type="month" 
+                  value={paymentPaidYearMonth}
+                  onChange={(e) => setPaymentPaidYearMonth(e.target.value)}
+                  className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 transition-all"
+                />
+              </div>
+
+              {/* Camps selector */}
+              <div className="lg:col-span-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Camps</label>
+                <select 
+                  value={paymentCampFilter}
+                  onChange={(e) => setPaymentCampFilter(e.target.value)}
+                  className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 cursor-pointer"
+                >
+                  <option value="all">-- All Camps --</option>
+                  {campList.map(camp => (
+                    <option key={camp} value={camp}>{camp}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Actions */}
+              <div className="lg:col-span-2 flex gap-2 w-full">
+                <button 
+                  type="submit" 
+                  className="bg-[#3958b2] hover:bg-[#2d468f] text-white font-bold p-2.5 rounded-lg flex items-center justify-center transition-all shadow-sm text-sm w-full"
+                >
+                  <Search className="h-4.5 w-4.5" />
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => { setEditPayment({ paid_by_user: "iqbaal", camp_name: "APM-DXB-camp-1", paid_for_year_month: "2026-08", amount: 100, collected_by: "admin", split_by: "Manual" }); setIsPaymentModalOpen(true); }}
+                  className="bg-[#26b048] hover:bg-[#1d8b37] text-white font-bold p-2.5 rounded-lg flex items-center justify-center transition-all shadow-sm text-sm w-full"
+                >
+                  <Plus className="h-4.5 w-4.5" />
+                </button>
+              </div>
+
+            </form>
+          </section>
+        )}
+
+        {/* ── 13. FILTER BAR (Collected Payments) ─────────────────────────── */}
+        {activeTab === "collected-payments" && (
+          <section className="bg-white border border-[#cfdbe6] rounded-xl p-5 mb-6 shadow-sm">
+            <form onSubmit={(e) => { e.preventDefault(); fetchCollectedPayments(); }} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4 items-end">
+              
+              {/* Keyword Search */}
+              <div className="lg:col-span-3">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Search Keyword</label>
+                <input 
+                  type="text" 
+                  placeholder="Search Here" 
+                  value={collectedSearch}
+                  onChange={(e) => setCollectedSearch(e.target.value)}
+                  className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 placeholder-slate-400 transition-all"
+                />
+              </div>
+
+              {/* Date Filters */}
+              <div className="lg:col-span-6 grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Start Date</label>
+                  <input 
+                    type="date" 
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">End Date</label>
+                  <input 
+                    type="date" 
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 transition-all"
+                  />
+                </div>
+              </div>
+
+              {/* Search button */}
+              <div className="lg:col-span-3">
+                <button 
+                  type="submit" 
+                  className="bg-[#3958b2] hover:bg-[#2d468f] text-white font-bold px-5 py-2.5 rounded-lg flex items-center gap-1.5 transition-all shadow-sm text-sm w-full justify-center"
+                >
+                  <Search className="h-4 w-4" />
+                  Search
+                </button>
+              </div>
+
+            </form>
+          </section>
+        )}
+
+        {/* ── TAB CONTENT: DASHBOARD ─────────────────────────────────────── */}
+        {/* Rendered in previous section code */}
+
         {/* ── TAB CONTENT: VOUCHER SALES TABLE (Option 1) ──────────────────── */}
-        {activeTab === "voucher-sales" && (
-          <div className="bg-white border border-[#cfdbe6] rounded-xl shadow-sm flex-1 flex flex-col min-h-0 overflow-hidden">
-            
+        {/* Rendered in previous section code */}
+
+        {/* ── TAB CONTENT: MONTHLY DAILY SALES CHART (Option 2) ───────────── */}
+        {/* Rendered in previous section code */}
+
+        {/* ── TAB CONTENT: CAMPS MONTHLY STACKED CHART (Option 3) ──────────── */}
+        {/* Rendered in previous section code */}
+
+        {/* ── TAB CONTENT: VOUCHER DATA / VALIDITY REPORT (Option 4) ───────── */}
+        {/* Rendered in previous section code */}
+
+        {/* ── TAB CONTENT: VOUCHER DATA / HOTSPOT REPORT (Option 5) ────────── */}
+        {/* Rendered in previous section code */}
+
+        {/* ── TAB CONTENT: PAYMENT - CAMP REPORT (Option 6) ────────────────── */}
+        {/* Rendered in previous section code */}
+
+        {/* ── TAB CONTENT: PAYMENT - USER CAMP REPORT (Option 7) ───────────── */}
+        {/* Rendered in previous section code */}
+
+        {/* ── TAB CONTENT: USER SALE REPORT (Option 8) ─────────────────────── */}
+        {/* Rendered in previous section code */}
+
+        {/* ── TAB CONTENT: COMPANIES MASTER (Option 9) ─────────────────────── */}
+        {/* Rendered in previous section code */}
+
+        {/* ── TAB CONTENT: Camps list Master (Option 10) ───────────────────── */}
+        {/* Rendered in previous section code */}
+
+        {/* ── TAB CONTENT: VALIDITY PROFILES MASTER (Option 11) ────────────── */}
+        {/* Rendered in previous section code */}
+
+        {/* ── TAB CONTENT: CAMP VALIDITY PRICING MASTER (Option 12) ────────── */}
+        {/* Rendered in previous section code */}
+
+        {/* ── TAB CONTENT: NOTIFICATIONS MASTER (Option 13) ────────────────── */}
+        {/* Rendered in previous section code */}
+
+        {/* ── TAB CONTENT: PAYMENTS LOG (Option 14) ────────────────────────── */}
+        {activeTab === "payments-list" && (
+          <div className="bg-white border border-[#cfdbe6] rounded-xl shadow-sm overflow-hidden flex-1 flex flex-col min-h-0">
             <div className="flex-1 overflow-x-auto min-h-0">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-[#cfdbe6] bg-slate-50 font-black text-slate-600">
-                    <th className="px-5 py-4 w-16">Sl. No.</th>
-                    <th className="px-5 py-4">Voucher Name</th>
-                    <th className="px-5 py-4">Mobile</th>
-                    <th className="px-5 py-4 text-right">Amount</th>
-                    <th className="px-5 py-4">Validity Profile</th>
-                    <th className="px-5 py-4">Company</th>
-                    <th className="px-5 py-4">Hotspot</th>
-                    <th className="px-5 py-4">Sold By</th>
-                    <th className="px-5 py-4">Sold Date</th>
-                    <th className="px-5 py-4 text-center">Action</th>
+                    <th className="px-6 py-4 w-20">Sl. No.</th>
+                    <th className="px-6 py-4">Paid By User</th>
+                    <th className="px-6 py-4">Camp</th>
+                    <th className="px-6 py-4">Paid For Month</th>
+                    <th className="px-6 py-4 text-right">Amount</th>
+                    <th className="px-6 py-4">Collected By</th>
+                    <th className="px-6 py-4">Split By</th>
+                    <th className="px-6 py-4">Payment Date</th>
+                    <th className="px-6 py-4">Payment Time</th>
+                    <th className="px-6 py-4 text-right w-32">Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {loadingSales ? (
+                <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                  {loadingPayments ? (
                     <tr>
-                      <td colSpan={10} className="px-6 py-20 text-center">
-                        <div className="flex flex-col items-center gap-3 justify-center">
-                          <RefreshCw className="h-6 w-6 animate-spin text-[#3958b2]" />
-                          <span className="text-slate-500 font-bold">Loading Voucher Sales...</span>
-                        </div>
+                      <td colSpan={10} className="px-6 py-12 text-center">
+                        <RefreshCw className="h-5 w-5 animate-spin text-slate-400 mx-auto" />
                       </td>
                     </tr>
-                  ) : salesData?.sales && salesData.sales.length > 0 ? (
-                    salesData.sales.map((record, index) => (
-                      <tr key={record.code} className="hover:bg-slate-50/70 transition-all font-medium text-slate-700">
-                        <td className="px-5 py-3 text-slate-400 font-bold">
-                          {((salesPage - 1) * entriesLimit) + index + 1}
-                        </td>
-                        <td className="px-5 py-3 font-mono text-[#3958b2] font-black tracking-wider select-all">
-                          {record.code}
-                        </td>
-                        <td className="px-5 py-3 font-mono select-all">
-                          {record.mobile || "—"}
-                        </td>
-                        <td className="px-5 py-3 text-right font-black text-[#3958b2]">
-                          AED {record.price.toFixed(2)}
-                        </td>
-                        <td className="px-5 py-3 font-bold">
-                          <span className="bg-[#ad27a7]/10 text-[#ad27a7] border border-[#ad27a7]/20 px-2.5 py-0.5 rounded-md text-[10px] font-extrabold whitespace-nowrap">
-                            {record.validity}-Days
-                          </span>
-                        </td>
-                        <td className="px-5 py-3 font-bold text-slate-500">
-                          Apricom DXB
-                        </td>
-                        <td className="px-5 py-3 font-semibold text-slate-600 truncate max-w-[150px]">
-                          {record.routerId}
-                        </td>
-                        <td className="px-5 py-3 font-bold">
-                          {record.seller || <span className="text-slate-400 italic font-normal">Direct / System</span>}
-                        </td>
-                        <td className="px-5 py-3 font-semibold text-slate-500 whitespace-nowrap">
-                          {record.timestamp}
-                        </td>
-                        <td className="px-5 py-3 text-center">
-                          <button className="text-slate-400 hover:text-slate-700 p-1 transition-colors">
-                            <CogIcon className="h-4.5 w-4.5 mx-auto" />
+                  ) : paymentsList.length > 0 ? (
+                    paymentsList.map((p, index) => (
+                      <tr key={p.id} className="hover:bg-slate-50/50 transition-all">
+                        <td className="px-6 py-3 font-bold text-slate-400">{index + 1}</td>
+                        <td className="px-6 py-3 font-bold text-slate-800">{p.paid_by_user}</td>
+                        <td className="px-6 py-3 text-[#3958b2]">{p.camp_name}</td>
+                        <td className="px-6 py-3 font-mono">{p.paid_for_year_month}</td>
+                        <td className="px-6 py-3 text-right font-black text-[#26b048]">AED {p.amount.toFixed(2)}</td>
+                        <td className="px-6 py-3">{p.collected_by || "—"}</td>
+                        <td className="px-6 py-3 font-mono">{p.split_by || "—"}</td>
+                        <td className="px-6 py-3">{p.payment_date}</td>
+                        <td className="px-6 py-3">{p.payment_time}</td>
+                        <td className="px-6 py-3 text-right flex gap-2 justify-end items-center">
+                          <button 
+                            onClick={() => handleTogglePaymentVerify(p.id, p.verified_status)}
+                            className={`px-2.5 py-1 rounded text-[10px] font-black tracking-wide shadow-sm transition-all ${
+                              p.verified_status === 1
+                                ? "bg-[#26b048] text-white hover:bg-[#1d8b37]"
+                                : "bg-[#ffbc36] text-white hover:bg-[#dca12a]"
+                            }`}
+                          >
+                            {p.verified_status === 1 ? "Verified" : "Verify"}
+                          </button>
+                          <button 
+                            onClick={() => { setEditPayment(p); setIsPaymentModalOpen(true); }}
+                            className="text-[#3958b2] hover:text-[#2d468f] p-1.5 rounded hover:bg-[#3958b2]/10 transition-colors"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </button>
+                          <button 
+                            onClick={() => handleDeletePayment(p.id)}
+                            className="text-red-500 hover:text-red-700 p-1.5 rounded hover:bg-red-50 transition-colors"
+                          >
+                            <Trash2 className="h-4 w-4" />
                           </button>
                         </td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={10} className="px-6 py-16 text-center text-slate-400 italic">
-                        No sales transactions match the filtered criteria.
+                      <td colSpan={10} className="px-6 py-10 text-center text-slate-400 italic">
+                        No payments match criteria filters.
                       </td>
                     </tr>
                   )}
                 </tbody>
                 
-                {!loadingSales && salesData?.sales && salesData.sales.length > 0 && (
-                  <tfoot className="bg-slate-50 border-t border-[#cfdbe6] font-bold text-slate-700 text-xs">
+                {!loadingPayments && paymentsList.length > 0 && (
+                  <tfoot className="bg-slate-50 border-t border-[#cfdbe6] font-bold text-xs text-slate-800">
                     <tr className="border-b border-[#cfdbe6]">
-                      <td colSpan={3} className="px-5 py-2.5 text-right font-extrabold">
-                        Total
-                      </td>
-                      <td className="px-5 py-2.5 text-right font-black text-sky-600">
-                        AED {pageTotalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                      <td colSpan={6}></td>
+                      <td colSpan={4} className="px-6 py-2.5 text-right font-extrabold">Total</td>
+                      <td className="px-6 py-2.5 text-right font-black text-sky-600">AED {paymentsTotals.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                      <td colSpan={5}></td>
                     </tr>
                     <tr>
-                      <td colSpan={3} className="px-5 py-2.5 text-right font-extrabold">
-                        Grand Total
-                      </td>
-                      <td className="px-5 py-2.5 text-right font-black text-[#26b048]">
-                        AED {summaryData?.summary.totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || pageTotalRevenue.toLocaleString()}
-                      </td>
-                      <td colSpan={6}></td>
+                      <td colSpan={4} className="px-6 py-2.5 text-right font-extrabold">Grand Total</td>
+                      <td className="px-6 py-2.5 text-right font-black text-sky-600">AED {paymentsTotals.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                      <td colSpan={5}></td>
                     </tr>
                   </tfoot>
                 )}
               </table>
             </div>
-
-            {/* Pagination Controls */}
-            {salesData?.pagination && salesData.pagination.totalPages > 1 && (
-              <div className="bg-slate-50 px-6 py-4 border-t border-[#cfdbe6] flex items-center justify-between">
-                <span className="text-xs text-slate-500 font-semibold">
-                  Showing {((salesPage - 1) * entriesLimit) + 1} to {Math.min(salesPage * entriesLimit, salesData.pagination.totalCount)} of {salesData.pagination.totalCount} entries
-                </span>
-                
-                <div className="flex gap-2">
-                  <button 
-                    disabled={salesPage === 1 || loadingSales}
-                    onClick={() => fetchSales(salesPage - 1)}
-                    className="bg-white border border-slate-300 disabled:opacity-40 px-3.5 py-1.5 rounded-lg text-xs font-bold hover:bg-slate-50 text-slate-700 flex items-center gap-1.5 transition-all shadow-sm"
-                  >
-                    <ChevronLeft className="h-3.5 w-3.5" />
-                    Previous
-                  </button>
-                  <button 
-                    disabled={salesPage === salesData.pagination.totalPages || loadingSales}
-                    onClick={() => fetchSales(salesPage + 1)}
-                    className="bg-white border border-slate-300 disabled:opacity-40 px-3.5 py-1.5 rounded-lg text-xs font-bold hover:bg-slate-50 text-slate-700 flex items-center gap-1.5 transition-all shadow-sm"
-                  >
-                    Next
-                    <ChevronRight className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-            )}
-
           </div>
         )}
 
-        {/* ── TAB CONTENT: MONTHLY DAILY SALES CHART (Option 2) ───────────── */}
-        {activeTab === "monthly-sales" && (
-          <div className="bg-white border border-[#cfdbe6] rounded-xl p-6 shadow-sm flex flex-col h-[450px]">
-            <div className="pb-3 mb-4 border-b border-slate-100 flex justify-between items-center">
-              <h5 className="text-sm font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                <TrendingUp className="h-4.5 w-4.5 text-[#3958b2]" />
-                Daily Sales Count for Month ({selectedMonth})
-              </h5>
-              <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
-                <span className="w-3.5 h-3.5 bg-[#3958b2] rounded"></span>
-                <span>Sales Count</span>
-              </div>
-            </div>
-            
-            <div className="flex-1 min-h-0">
-              {loadingSummary ? (
-                <div className="h-full flex items-center justify-center">
-                  <RefreshCw className="h-6 w-6 animate-spin text-slate-400" />
-                </div>
-              ) : monthlyDailyTrends.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={monthlyDailyTrends} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                    <XAxis dataKey="date" stroke="#64748b" fontSize={11} tickLine={false} />
-                    <YAxis stroke="#64748b" fontSize={11} tickLine={false} />
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: "#ffffff", borderColor: "#cfdbe6", borderRadius: "8px", color: "#334155" }}
-                      labelStyle={{ fontWeight: "bold", color: "#3958b2" }}
-                    />
-                    <Bar dataKey="sales" name="Sales Count" fill="#3958b2" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-full flex items-center justify-center text-slate-400 text-sm italic">
-                  No sales logged for this month.
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ── TAB CONTENT: CAMPS MONTHLY STACKED CHART (Option 3) ──────────── */}
-        {activeTab === "sales-chart" && (
-          <div className="bg-white border border-[#cfdbe6] rounded-xl p-6 shadow-sm flex flex-col h-[480px]">
-            <div className="pb-3 mb-4 border-b border-slate-100 flex justify-between items-center">
-              <h5 className="text-sm font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                <Layers className="h-4.5 w-4.5 text-[#3958b2]" />
-                Camps - Monthly Voucher Sales Revenue
-              </h5>
-              <div className="text-xs text-slate-500 font-bold">
-                Date Range: {startDate} to {endDate}
-              </div>
-            </div>
-
-            <div className="flex-1 min-h-0">
-              {loadingSales ? (
-                <div className="h-full flex items-center justify-center">
-                  <RefreshCw className="h-6 w-6 animate-spin text-slate-400" />
-                </div>
-              ) : campChartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={campChartData} margin={{ top: 10, right: 10, left: -10, bottom: 20 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                    <XAxis dataKey="month" stroke="#64748b" fontSize={11} tickLine={false} label={{ value: 'Year | Month', position: 'bottom', offset: 5, fill: '#334155', fontWeight: 'bold' }} />
-                    <YAxis stroke="#64748b" fontSize={11} tickLine={false} label={{ value: 'Sales Amount (AED)', angle: -90, position: 'left', offset: 0, fill: '#334155', fontWeight: 'bold' }} />
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: "#ffffff", borderColor: "#cfdbe6", borderRadius: "8px", color: "#334155" }}
-                    />
-                    <Legend verticalAlign="top" height={36} />
-                    
-                    {/* Render separate bar for each camp */}
-                    {campList.map((camp, index) => (
-                      <Bar 
-                        key={camp} 
-                        dataKey={camp} 
-                        name={camp} 
-                        fill={campColors[index % campColors.length]} 
-                        stackId={isStacked ? "camp-stack" : undefined}
-                        radius={isStacked ? [0, 0, 0, 0] : [4, 4, 0, 0]}
-                      />
-                    ))}
-
-                    {/* Total overlay line */}
-                    <Line type="monotone" dataKey="Total" name="Total Revenue" stroke="#109618" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-full flex items-center justify-center text-slate-400 text-sm italic">
-                  No sales logged within this range to plot camp shares.
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ── TAB CONTENT: AGENT LEADERBOARD ──────────────────────────────── */}
-        {activeTab === "agents" && (
-          <div className="bg-white border border-[#cfdbe6] rounded-xl shadow-sm flex-1 flex flex-col min-h-0 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
+        {/* ── TAB CONTENT: COLLECTED PAYMENTS (Option 15) ──────────────────── */}
+        {activeTab === "collected-payments" && (
+          <div className="bg-white border border-[#cfdbe6] rounded-xl shadow-sm overflow-hidden flex-1 flex flex-col min-h-0">
+            <div className="flex-1 overflow-x-auto min-h-0">
+              <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="border-b border-[#cfdbe6] bg-slate-50">
-                    <th className="px-8 py-5 text-xs font-black text-slate-600 uppercase tracking-widest w-20">Rank</th>
-                    <th className="px-8 py-5 text-xs font-black text-slate-600 uppercase tracking-widest">Agent Details</th>
-                    <th className="px-8 py-5 text-xs font-black text-slate-600 uppercase tracking-widest text-center">Vouchers Sold</th>
-                    <th className="px-8 py-5 text-xs font-black text-slate-600 uppercase tracking-widest text-right">Revenue Generated</th>
-                    <th className="px-8 py-5 text-xs font-black text-slate-600 uppercase tracking-widest text-right">Actions</th>
+                  <tr className="border-b border-[#cfdbe6] bg-slate-50 font-black text-slate-600">
+                    <th className="px-6 py-4 w-20">Sl. No.</th>
+                    <th className="px-6 py-4">Date</th>
+                    <th className="px-6 py-4">Paid By</th>
+                    <th className="px-6 py-4 text-right">Amount</th>
+                    <th className="px-6 py-4">Collected By</th>
+                    <th className="px-6 py-4">Split By</th>
+                    <th className="px-6 py-4 text-center">Verified Status</th>
+                    <th className="px-6 py-4 text-right w-32">Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {loadingSummary ? (
+                <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                  {loadingCollected ? (
                     <tr>
-                      <td colSpan={5} className="px-8 py-20 text-center">
-                        <div className="flex flex-col items-center gap-3 justify-center">
-                          <RefreshCw className="h-6 w-6 animate-spin text-[#3958b2]" />
-                          <span className="text-slate-500 text-sm">Loading agents...</span>
-                        </div>
+                      <td colSpan={8} className="px-6 py-12 text-center">
+                        <RefreshCw className="h-5 w-5 animate-spin text-slate-400 mx-auto" />
                       </td>
                     </tr>
-                  ) : summaryData?.agents && summaryData.agents.length > 0 ? (
-                    summaryData.agents.map((agent, index) => (
-                      <tr key={agent.name} className="hover:bg-slate-50/75 transition-all">
-                        <td className="px-8 py-4.5 text-sm font-black text-slate-400">
-                          #{index + 1}
+                  ) : collectedList.length > 0 ? (
+                    collectedList.map((p, index) => (
+                      <tr key={p.id} className="hover:bg-slate-50/50 transition-all">
+                        <td className="px-6 py-3 font-bold text-slate-400">{index + 1}</td>
+                        <td className="px-6 py-3">{p.payment_date} {p.payment_time}</td>
+                        <td className="px-6 py-3 font-bold text-slate-800">{p.paid_by_user}</td>
+                        <td className="px-6 py-3 text-right font-black text-[#26b048]">AED {p.amount.toFixed(2)}</td>
+                        <td className="px-6 py-3">{p.collected_by || "—"}</td>
+                        <td className="px-6 py-3 font-mono">{p.split_by || "—"}</td>
+                        <td className="px-6 py-3 text-center">
+                          <span className="bg-[#26b048]/10 text-[#26b048] px-3 py-1 rounded-full text-[10px] font-black">
+                            Verified
+                          </span>
                         </td>
-                        <td className="px-8 py-4.5">
-                          <div className="flex items-center gap-3.5">
-                            <div className="h-10 w-10 rounded-lg bg-[#3958b2]/10 border border-[#3958b2]/20 text-[#3958b2] flex items-center justify-center font-black text-sm uppercase">
-                              {agent.name.substring(0, 2)}
-                            </div>
-                            <div>
-                              <span className="font-extrabold text-sm text-slate-800 block">{agent.name}</span>
-                              <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">Hotspot Operator</span>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-8 py-4.5 text-sm font-bold text-center text-slate-600">
-                          {agent.salesCount} vouchers
-                        </td>
-                        <td className="px-8 py-4.5 text-sm font-black text-[#3958b2] text-right">
-                          AED {agent.revenue.toLocaleString()}
-                        </td>
-                        <td className="px-8 py-4.5 text-sm text-right">
+                        <td className="px-6 py-3 text-right">
                           <button 
-                            onClick={() => {
-                              setSelectedAgent(agent.name);
-                              setActiveTab("voucher-sales");
-                            }}
-                            className="bg-[#3958b2]/10 hover:bg-[#3958b2]/20 text-[#3958b2] border border-[#3958b2]/20 px-4 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm"
+                            onClick={() => handleTogglePaymentVerify(p.id, 1)}
+                            className="text-[#3958b2] hover:text-[#2d468f] text-[10px] font-black underline"
                           >
-                            View Sales Logs
+                            Mark Pending
                           </button>
                         </td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={5} className="px-8 py-16 text-center text-slate-400 text-sm italic">
-                        No agents have recorded any voucher sales in the selected date range.
+                      <td colSpan={8} className="px-6 py-10 text-center text-slate-400 italic">
+                        No collected payments records found.
                       </td>
                     </tr>
                   )}
                 </tbody>
+                
+                {!loadingCollected && collectedList.length > 0 && (
+                  <tfoot className="bg-slate-50 border-t border-[#cfdbe6] font-bold text-xs text-slate-800">
+                    <tr className="border-b border-[#cfdbe6]">
+                      <td colSpan={3} className="px-6 py-2.5 text-right font-extrabold">Total</td>
+                      <td className="px-6 py-2.5 text-right font-black text-sky-600">AED {collectedTotals.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                      <td colSpan={4}></td>
+                    </tr>
+                    <tr>
+                      <td colSpan={3} className="px-6 py-2.5 text-right font-extrabold">Grand Total</td>
+                      <td className="px-6 py-2.5 text-right font-black text-sky-600">AED {collectedTotals.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                      <td colSpan={4}></td>
+                    </tr>
+                  </tfoot>
+                )}
               </table>
             </div>
           </div>
         )}
 
+        {/* ── TAB CONTENT: AGENT LEADERBOARD ──────────────────────────────── */}
+        {/* Rendered in previous section code */}
+
         {/* ── TAB CONTENT: PRICING SETTINGS ──────────────────────────────── */}
-        {activeTab === "pricing" && (
-          <div className="bg-white border border-[#cfdbe6] rounded-xl p-6 md:p-8 shadow-sm max-w-3xl">
-            <div className="flex justify-between items-center pb-4 mb-6 border-b border-slate-100">
-              <div>
-                <h4 className="text-base font-black text-slate-700 tracking-wide uppercase">Voucher Pricing Rules</h4>
-                <p className="text-xs text-slate-400 mt-1">Configure pricing values for each plan duration. These are used dynamically to compute agent revenues.</p>
-              </div>
-              <button 
-                onClick={handleAddPricingRow}
-                className="bg-[#3958b2] hover:bg-[#2d468f] text-white text-xs font-bold px-4 py-2.5 rounded-lg flex items-center gap-1.5 transition-all shadow-md"
-              >
-                Add Custom Plan
-              </button>
-            </div>
-
-            {loadingPricing ? (
-              <div className="py-16 flex items-center justify-center">
-                <RefreshCw className="h-6 w-6 animate-spin text-slate-400" />
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="grid grid-cols-3 text-xs font-black text-slate-400 uppercase tracking-widest pb-3 border-b border-slate-100">
-                  <div>Plan Validity</div>
-                  <div>Price (AED / Currency)</div>
-                  <div className="text-right">Action</div>
-                </div>
-
-                {Object.keys(editPriceMap).length > 0 ? (
-                  Object.keys(editPriceMap)
-                    .map(Number)
-                    .sort((a, b) => a - b)
-                    .map((days) => (
-                      <div key={days} className="grid grid-cols-3 items-center py-3 border-b border-slate-100/50">
-                        <div className="text-sm font-bold text-slate-700">
-                          {days} Days Plan
-                        </div>
-                        <div className="relative max-w-[160px]">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400">AED</span>
-                          <input 
-                            type="number"
-                            value={editPriceMap[days] || "0"}
-                            onChange={(e) => setEditPriceMap(prev => ({ ...prev, [days]: e.target.value }))}
-                            className="bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 pl-11 pr-3 py-2 rounded-lg text-sm font-bold outline-none text-slate-800 w-full transition-all"
-                          />
-                        </div>
-                        <div className="text-right">
-                          <button 
-                            disabled={savingPrice === days}
-                            onClick={() => handlePriceUpdate(days)}
-                            className="bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 text-xs font-bold px-4 py-2 rounded-lg border border-slate-300 transition-all inline-flex items-center gap-1.5 shadow-sm"
-                          >
-                            {savingPrice === days ? (
-                              <RefreshCw className="h-3 w-3 animate-spin text-[#3958b2]" />
-                            ) : "Save"}
-                          </button>
-                        </div>
-                      </div>
-                    ))
-                ) : (
-                  <div className="py-12 text-center text-slate-400 text-sm italic">
-                    No pricing configurations loaded.
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
+        {/* Rendered in previous section code */}
 
       </main>
+
+      {/* ── POPUP MODAL: COMPANIES MASTER EDIT/NEW ───────────────────────── */}
+      {/* Rendered in previous section code */}
+
+      {/* ── POPUP MODAL: CAMPS MASTER EDIT/NEW ───────────────────────────── */}
+      {/* Rendered in previous section code */}
+
+      {/* ── POPUP MODAL: VALIDITY PROFILES EDIT/NEW ──────────────────────── */}
+      {/* Rendered in previous section code */}
+
+      {/* ── POPUP MODAL: CAMP VALIDITY PRICING EDIT/NEW ─────────────────── */}
+      {/* Rendered in previous section code */}
+
+      {/* ── POPUP MODAL: NOTIFICATIONS MASTER EDIT/NEW ───────────────────── */}
+      {/* Rendered in previous section code */}
+
+      {/* ── POPUP MODAL: PAYMENTS LOG EDIT/NEW ───────────────────────────── */}
+      {isPaymentModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] animate-in fade-in duration-200">
+          <div className="bg-white border border-[#cfdbe6] rounded-xl shadow-2xl p-6 w-[450px] flex flex-col">
+            <div className="flex justify-between items-center pb-3 border-b border-slate-100 mb-4">
+              <h4 className="font-black text-slate-800 text-sm uppercase tracking-wide">
+                {editPayment?.id ? "Edit Payment Log" : "New Payment Log"}
+              </h4>
+              <button 
+                onClick={() => { setIsPaymentModalOpen(false); setEditPayment(null); }}
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <div className="space-y-4 mb-6 text-xs font-bold text-slate-600">
+              <div>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Paid By User</label>
+                <input 
+                  type="text" 
+                  value={editPayment?.paid_by_user || ""}
+                  onChange={(e) => setEditPayment(prev => prev ? { ...prev, paid_by_user: e.target.value } : null)}
+                  className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-bold outline-none text-slate-800"
+                  placeholder="e.g. iqbaal"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Camp</label>
+                <select 
+                  value={editPayment?.camp_name || ""}
+                  onChange={(e) => setEditPayment(prev => prev ? { ...prev, camp_name: e.target.value } : null)}
+                  className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-bold outline-none text-slate-800 cursor-pointer"
+                >
+                  {campList.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                  {campList.length === 0 && (
+                    <option value="APM-DXB-camp-1">APM-DXB-camp-1</option>
+                  )}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Paid For Year | Month</label>
+                <input 
+                  type="month" 
+                  value={editPayment?.paid_for_year_month || ""}
+                  onChange={(e) => setEditPayment(prev => prev ? { ...prev, paid_for_year_month: e.target.value } : null)}
+                  className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-bold outline-none text-slate-800"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Amount (AED)</label>
+                <input 
+                  type="number" 
+                  value={editPayment?.amount || 0}
+                  onChange={(e) => setEditPayment(prev => prev ? { ...prev, amount: Number(e.target.value) } : null)}
+                  className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-bold outline-none text-slate-800"
+                  placeholder="e.g. 500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Collected By</label>
+                  <input 
+                    type="text" 
+                    value={editPayment?.collected_by || ""}
+                    onChange={(e) => setEditPayment(prev => prev ? { ...prev, collected_by: e.target.value } : null)}
+                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Split By</label>
+                  <input 
+                    type="text" 
+                    value={editPayment?.split_by || ""}
+                    onChange={(e) => setEditPayment(prev => prev ? { ...prev, split_by: e.target.value } : null)}
+                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 justify-end text-xs font-bold">
+              <button 
+                onClick={() => { setIsPaymentModalOpen(false); setEditPayment(null); }}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-250 border border-slate-300 text-slate-700 rounded-lg transition-all"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleSavePayment}
+                className="px-5 py-2 bg-[#3958b2] hover:bg-[#2d468f] text-white rounded-lg transition-all shadow-md"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── FOOTER (Powered by Azinova Technologies) ────────────────────── */}
       <footer className="w-full bg-[#bfebff] border-t border-[#aedbff] py-3.5 px-6 flex justify-between items-center text-xs font-bold text-[#4a6b82]">
