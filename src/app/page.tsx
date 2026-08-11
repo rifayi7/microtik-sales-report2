@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { 
   TrendingUp, 
   Users, 
@@ -19,7 +19,8 @@ import {
   Home,
   CreditCard,
   BookOpen,
-  Coins
+  Coins,
+  Settings as CogIcon
 } from "lucide-react";
 import { 
   ResponsiveContainer, 
@@ -31,10 +32,15 @@ import {
   Tooltip, 
   Cell,
   PieChart, 
-  Pie
+  Pie,
+  BarChart,
+  Bar,
+  ComposedChart,
+  Line,
+  Legend
 } from "recharts";
 
-type Tab = "dashboard" | "sales" | "agents" | "pricing";
+type Tab = "dashboard" | "voucher-sales" | "monthly-sales" | "sales-chart" | "agents" | "pricing";
 
 interface SummaryData {
   summary: {
@@ -80,18 +86,30 @@ interface PricingData {
   pricing: Record<number, number>;
 }
 
+const COLORS = ["#3958b2", "#26b048", "#ff6228", "#ad27a7", "#862beb", "#35bccc", "#ffbc36"];
+
 export default function SalesReportDashboard() {
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
   const [isMounted, setIsMounted] = useState(false);
 
-  // Filters State
+  // General Filter States
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [selectedAgent, setSelectedAgent] = useState("all");
   const [selectedValidity, setSelectedValidity] = useState("all");
   const [selectedRouter, setSelectedRouter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [entriesLimit, setEntriesLimit] = useState(100);
   
+  // Tab 2: Monthly Voucher Sales Specific States
+  const [selectedMonth, setSelectedMonth] = useState("2026-08");
+
+  // Tab 3: Voucher Sales Chart Specific States
+  const [startMonthDay, setStartMonthDay] = useState("2026-08-05");
+  const [endDayRange, setEndDayRange] = useState("11");
+  const [noOfMonths, setNoOfMonths] = useState(3);
+  const [isStacked, setIsStacked] = useState(false);
+
   // API Data State
   const [summaryData, setSummaryData] = useState<SummaryData | null>(null);
   const [salesData, setSalesData] = useState<SalesData | null>(null);
@@ -104,8 +122,11 @@ export default function SalesReportDashboard() {
   const [savingPrice, setSavingPrice] = useState<number | null>(null);
   const [salesPage, setSalesPage] = useState(1);
   
-  // Carousel State for Today's Sales
+  // Carousel State for Today's Sales (Dashboard)
   const [carouselIndex, setCarouselIndex] = useState(0);
+
+  // Dropdown States for Header Navigation
+  const [activeDropdown, setActiveDropdown] = useState<"sales" | "reports" | "masters" | null>(null);
 
   // Custom pricing edit state
   const [editPriceMap, setEditPriceMap] = useState<Record<number, string>>({});
@@ -125,6 +146,46 @@ export default function SalesReportDashboard() {
 
     setStartDate(formatDate(firstDay));
     setEndDate(formatDate(now));
+  }, []);
+
+  // Sync Monthly Voucher Sales filter to startDate/endDate
+  useEffect(() => {
+    if (activeTab === "monthly-sales" && selectedMonth) {
+      const [year, month] = selectedMonth.split("-");
+      const firstDay = `${year}-${month}-01`;
+      const lastDay = new Date(Number(year), Number(month), 0).getDate();
+      const lastDayStr = `${year}-${month}-${String(lastDay).padStart(2, "0")}`;
+      setStartDate(firstDay);
+      setEndDate(lastDayStr);
+    }
+  }, [selectedMonth, activeTab]);
+
+  // Sync Camps - Monthly Voucher Sales Chart filter to startDate/endDate
+  useEffect(() => {
+    if (activeTab === "sales-chart" && startMonthDay) {
+      setStartDate(startMonthDay);
+      const start = new Date(startMonthDay);
+      if (!isNaN(start.getTime())) {
+        const targetYear = start.getFullYear();
+        const targetMonth = start.getMonth() + noOfMonths;
+        const targetDay = parseInt(endDayRange);
+        
+        const end = new Date(targetYear, targetMonth, targetDay);
+        const year = end.getFullYear();
+        const month = String(end.getMonth() + 1).padStart(2, "0");
+        const day = String(end.getDate()).padStart(2, "0");
+        setEndDate(`${year}-${month}-${day}`);
+      }
+    }
+  }, [startMonthDay, endDayRange, noOfMonths, activeTab]);
+
+  // Close dropdowns on clicking anywhere
+  useEffect(() => {
+    const handleOutsideClick = () => {
+      setActiveDropdown(null);
+    };
+    window.addEventListener("click", handleOutsideClick);
+    return () => window.removeEventListener("click", handleOutsideClick);
   }, []);
 
   // Fetch summary stats
@@ -159,7 +220,11 @@ export default function SalesReportDashboard() {
     try {
       const params = new URLSearchParams();
       params.append("page", String(page));
-      params.append("limit", "15");
+      
+      // If we are in Monthly or Chart views, we want a large limit to do client-side aggregates
+      const limitVal = ["monthly-sales", "sales-chart"].includes(activeTab) ? "10000" : String(entriesLimit);
+      params.append("limit", limitVal);
+      
       if (startDate) params.append("startDate", startDate);
       if (endDate) params.append("endDate", endDate);
       if (selectedAgent) params.append("agent", selectedAgent);
@@ -202,22 +267,28 @@ export default function SalesReportDashboard() {
     }
   };
 
-  // Re-fetch when filters or active tab changes
+  // Re-fetch when filters, limit, or active tab changes
   useEffect(() => {
     if (!isMounted) return;
     if (activeTab === "dashboard") {
       fetchSummary();
       fetchSales(1);
-    } else if (activeTab === "sales") {
+    } else if (activeTab === "voucher-sales") {
       fetchSales(1);
+    } else if (activeTab === "monthly-sales") {
+      fetchSummary();
+      fetchSales(1); // Fetch sales logs for camp dropdown listing or filters
+    } else if (activeTab === "sales-chart") {
+      fetchSummary();
+      fetchSales(1); // Fetch all records within range to aggregate stacked/grouped chart
     } else if (activeTab === "agents") {
       fetchSummary();
     } else if (activeTab === "pricing") {
       fetchPricing();
     }
-  }, [activeTab, startDate, endDate, selectedAgent, selectedValidity, selectedRouter, isMounted]);
+  }, [activeTab, startDate, endDate, selectedAgent, selectedValidity, selectedRouter, entriesLimit, isMounted]);
 
-  // Carousel slider effect
+  // Carousel slider effect for dashboard leader
   useEffect(() => {
     if (activeTab !== "dashboard" || !summaryData?.agents || summaryData.agents.length === 0) return;
     const interval = setInterval(() => {
@@ -226,12 +297,13 @@ export default function SalesReportDashboard() {
     return () => clearInterval(interval);
   }, [activeTab, summaryData]);
 
-  // Handle Search Input
+  // Handle Search Input Form
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (activeTab === "dashboard" || activeTab === "agents") {
+    if (activeTab === "dashboard" || activeTab === "agents" || activeTab === "monthly-sales" || activeTab === "sales-chart") {
       fetchSummary();
-    } else if (activeTab === "sales") {
+    }
+    if (activeTab === "voucher-sales" || activeTab === "monthly-sales" || activeTab === "sales-chart") {
       fetchSales(1);
     }
   };
@@ -253,6 +325,9 @@ export default function SalesReportDashboard() {
     setSelectedValidity("all");
     setSelectedRouter("all");
     setSearchQuery("");
+    setEntriesLimit(100);
+    setSelectedMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`);
+    setStartMonthDay(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-05`);
   };
 
   // Handle price update
@@ -345,24 +420,89 @@ export default function SalesReportDashboard() {
     }
   };
 
-  const COLORS = ["#3958b2", "#26b048", "#ff6228", "#ad27a7", "#862beb", "#35bccc", "#ffbc36"];
+  // Group daily trends for Monthly Voucher Sales
+  const monthlyDailyTrends = useMemo(() => {
+    if (!summaryData?.trends) return [];
+    // We already have daily trends for the selected month range. Just map it!
+    return summaryData.trends.map((item) => ({
+      date: item.date,
+      sales: item.sales,
+      revenue: item.revenue
+    }));
+  }, [summaryData]);
 
-  if (!isMounted) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-[#d5e5f4] text-slate-800">
-        <div className="flex flex-col items-center gap-3">
-          <RefreshCw className="h-10 w-10 animate-spin text-[#3958b2]" />
-          <p className="text-slate-600 font-semibold">Loading Smartwifi dashboard...</p>
-        </div>
-      </div>
-    );
-  }
+  // Aggregate monthly sales totals for Monthly Voucher Sales pills
+  const monthlyAggregatedTotals = useMemo(() => {
+    let count = 0;
+    let revenue = 0;
+    monthlyDailyTrends.forEach(item => {
+      count += item.sales;
+      revenue += item.revenue;
+    });
+    return { count, revenue };
+  }, [monthlyDailyTrends]);
+
+  // Aggregate sales data by Month and Camp (Router ID) for Camps - Monthly Voucher Sales Chart
+  const campChartData = useMemo(() => {
+    if (!salesData?.sales) return [];
+    
+    // 1. Get all unique router IDs (Camps)
+    const routers = Array.from(new Set(salesData.sales.map(s => s.routerId || "Direct/System")));
+    
+    // 2. Group by Month (YYYY-MM)
+    const groups: Record<string, any> = {};
+    
+    salesData.sales.forEach(sale => {
+      let monthKey = "Unknown";
+      if (sale.timestamp.includes("-")) {
+        const parts = sale.timestamp.split(" ")[0].split("-");
+        if (parts.length === 3) {
+          // Check if format is YYYY-MM-DD or DD-MM-YYYY
+          if (parts[0].length === 4) {
+            monthKey = `${parts[0]}-${parts[1]}`;
+          } else {
+            monthKey = `${parts[2]}-${parts[1]}`;
+          }
+        }
+      }
+      
+      if (!groups[monthKey]) {
+        groups[monthKey] = { month: monthKey, Total: 0 };
+        routers.forEach(r => { groups[monthKey][r] = 0; });
+      }
+      
+      const rId = sale.routerId || "Direct/System";
+      groups[monthKey][rId] = (groups[monthKey][rId] || 0) + sale.price;
+      groups[monthKey].Total += sale.price;
+    });
+    
+    // Convert to sorted array
+    return Object.values(groups).sort((a: any, b: any) => a.month.localeCompare(b.month));
+  }, [salesData]);
+
+  // Dynamic colors list for stack bars
+  const campColors = COLORS;
 
   const agentOptions = salesData?.filters?.agents || [];
   const planOptions = salesData?.filters?.plans || [];
-
-  // Carousel item list (dynamic from loaded agent summary details)
   const carouselItems = summaryData?.agents.slice(0, 5) || [];
+
+  // Unique list of camps found in the current loaded sales log
+  const campList = useMemo(() => {
+    if (!salesData?.sales) return [];
+    return Array.from(new Set(salesData.sales.map(s => s.routerId || "Direct/System")));
+  }, [salesData]);
+
+  // Calculate current page's sum for Voucher Sales footer
+  const pageTotalRevenue = useMemo(() => {
+    if (!salesData?.sales) return 0;
+    return salesData.sales.reduce((sum, item) => sum + item.price, 0);
+  }, [salesData]);
+
+  const handleDropdownToggle = (e: React.MouseEvent, type: "sales" | "reports" | "masters") => {
+    e.stopPropagation();
+    setActiveDropdown((prev) => (prev === type ? null : type));
+  };
 
   return (
     <div className="min-h-screen bg-[#d5e5f4] text-[#212529] font-sans flex flex-col">
@@ -390,9 +530,9 @@ export default function SalesReportDashboard() {
         </div>
       </header>
 
-      {/* ── SUB NAVIGATION MENU (Light blue background) ─────────────────────────── */}
-      <nav className="fixed top-[70px] left-0 w-full h-[45px] bg-[#bfebff] border-b border-[#aedbff] flex items-center px-6 z-40 overflow-x-auto shadow-sm">
-        <ul className="flex items-center gap-5 text-sm font-bold whitespace-nowrap">
+      {/* ── SUB NAVIGATION MENU (Light blue background with dropdown support) ──── */}
+      <nav className="fixed top-[70px] left-0 w-full h-[45px] bg-[#bfebff] border-b border-[#aedbff] flex items-center px-6 z-40 overflow-visible shadow-sm">
+        <ul className="flex items-center gap-5 text-sm font-bold whitespace-nowrap overflow-visible">
           <li>
             <button 
               onClick={() => setActiveTab("dashboard")} 
@@ -406,56 +546,109 @@ export default function SalesReportDashboard() {
               Dashboard
             </button>
           </li>
-          <li>
+          
+          {/* Dropdown 1: Sales */}
+          <li className="relative overflow-visible">
             <button 
-              onClick={() => setActiveTab("sales")} 
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-md transition-all ${
-                activeTab === "sales" 
+              onClick={(e) => handleDropdownToggle(e, "sales")} 
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-md transition-all ${
+                ["voucher-sales", "monthly-sales", "sales-chart"].includes(activeTab)
                   ? "text-[#1e3c72] bg-white/60 shadow-sm" 
                   : "text-[#4a6b82] hover:text-[#1e3c72]"
               }`}
             >
               <CreditCard className="h-4 w-4" />
-              Sales Logs
+              Sales
+              <ChevronDown className="h-3.5 w-3.5" />
             </button>
+            {activeDropdown === "sales" && (
+              <div className="absolute top-full left-0 mt-1 bg-white border border-[#cfdbe6] rounded-md shadow-md min-w-[200px] z-50 flex flex-col py-1 animate-in fade-in slide-in-from-top-1 duration-150">
+                <button 
+                  onClick={() => { setActiveTab("voucher-sales"); setActiveDropdown(null); }}
+                  className="px-4 py-2 text-xs sm:text-sm font-semibold text-[#4a6b82] hover:text-[#1e3c72] hover:bg-[#bfebff]/30 text-left w-full transition-all"
+                >
+                  Voucher Sales
+                </button>
+                <button 
+                  onClick={() => { setActiveTab("monthly-sales"); setActiveDropdown(null); }}
+                  className="px-4 py-2 text-xs sm:text-sm font-semibold text-[#4a6b82] hover:text-[#1e3c72] hover:bg-[#bfebff]/30 text-left w-full transition-all"
+                >
+                  Monthly Voucher Sales
+                </button>
+                <button 
+                  onClick={() => { setActiveTab("sales-chart"); setActiveDropdown(null); }}
+                  className="px-4 py-2 text-xs sm:text-sm font-semibold text-[#4a6b82] hover:text-[#1e3c72] hover:bg-[#bfebff]/30 text-left w-full transition-all"
+                >
+                  Voucher Sales Chart
+                </button>
+              </div>
+            )}
           </li>
+
           <li>
             <span className="flex items-center gap-2 px-3.5 py-1.5 text-slate-400 cursor-not-allowed opacity-50">
               <BookOpen className="h-4 w-4" />
               Expenses
             </span>
           </li>
+          
           <li>
             <span className="flex items-center gap-2 px-3.5 py-1.5 text-slate-400 cursor-not-allowed opacity-50">
               <DollarSign className="h-4 w-4" />
               Payments
             </span>
           </li>
-          <li>
+          
+          {/* Dropdown 2: Reports */}
+          <li className="relative overflow-visible">
             <button 
-              onClick={() => setActiveTab("agents")} 
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-md transition-all ${
-                activeTab === "agents" 
+              onClick={(e) => handleDropdownToggle(e, "reports")} 
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-md transition-all ${
+                activeTab === "agents"
                   ? "text-[#1e3c72] bg-white/60 shadow-sm" 
                   : "text-[#4a6b82] hover:text-[#1e3c72]"
               }`}
             >
-              <Users className="h-4 w-4" />
-              Agent Leaderboard
+              <FileText className="h-4 w-4" />
+              Reports
+              <ChevronDown className="h-3.5 w-3.5" />
             </button>
+            {activeDropdown === "reports" && (
+              <div className="absolute top-full left-0 mt-1 bg-white border border-[#cfdbe6] rounded-md shadow-md min-w-[200px] z-50 flex flex-col py-1">
+                <button 
+                  onClick={() => { setActiveTab("agents"); setActiveDropdown(null); }}
+                  className="px-4 py-2 text-xs sm:text-sm font-semibold text-[#4a6b82] hover:text-[#1e3c72] hover:bg-[#bfebff]/30 text-left w-full transition-all"
+                >
+                  Agent Leaderboard
+                </button>
+              </div>
+            )}
           </li>
-          <li>
+
+          {/* Dropdown 3: Masters */}
+          <li className="relative overflow-visible">
             <button 
-              onClick={() => setActiveTab("pricing")} 
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-md transition-all ${
-                activeTab === "pricing" 
+              onClick={(e) => handleDropdownToggle(e, "masters")} 
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-md transition-all ${
+                activeTab === "pricing"
                   ? "text-[#1e3c72] bg-white/60 shadow-sm" 
                   : "text-[#4a6b82] hover:text-[#1e3c72]"
               }`}
             >
-              <Settings className="h-4 w-4" />
-              Pricing Settings
+              <Layers className="h-4 w-4" />
+              Masters
+              <ChevronDown className="h-3.5 w-3.5" />
             </button>
+            {activeDropdown === "masters" && (
+              <div className="absolute top-full left-0 mt-1 bg-white border border-[#cfdbe6] rounded-md shadow-md min-w-[200px] z-50 flex flex-col py-1">
+                <button 
+                  onClick={() => { setActiveTab("pricing"); setActiveDropdown(null); }}
+                  className="px-4 py-2 text-xs sm:text-sm font-semibold text-[#4a6b82] hover:text-[#1e3c72] hover:bg-[#bfebff]/30 text-left w-full transition-all"
+                >
+                  Pricing Settings
+                </button>
+              </div>
+            )}
           </li>
         </ul>
       </nav>
@@ -467,7 +660,9 @@ export default function SalesReportDashboard() {
         <div className="flex justify-between items-center mb-6">
           <h3 className="text-xl font-bold text-[#1f2d3d] tracking-wide uppercase font-sans">
             {activeTab === "dashboard" && "Dashboard"}
-            {activeTab === "sales" && "Sales Log"}
+            {activeTab === "voucher-sales" && "Voucher Sales"}
+            {activeTab === "monthly-sales" && "Monthly Voucher Sales"}
+            {activeTab === "sales-chart" && "Camps - Monthly Voucher Sales"}
             {activeTab === "agents" && "Agent Performance Leaderboard"}
             {activeTab === "pricing" && "Pricing Settings"}
           </h3>
@@ -476,13 +671,25 @@ export default function SalesReportDashboard() {
           </div>
         </div>
 
-        {/* ── FILTER & CONTROLS BAR (Dashboard / Sales / Agents) ──────────── */}
-        {activeTab !== "pricing" && (
+        {/* ── 1. FILTER BAR (Voucher Sales - Option 1) ────────────────────── */}
+        {activeTab === "voucher-sales" && (
           <section className="bg-white border border-[#cfdbe6] rounded-xl p-5 mb-6 shadow-sm">
             <form onSubmit={handleSearchSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4 items-end">
               
+              {/* Keyword Search */}
+              <div className="lg:col-span-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Search Keyword</label>
+                <input 
+                  type="text" 
+                  placeholder="Type something..." 
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 placeholder-slate-400 transition-all"
+                />
+              </div>
+
               {/* Date Filters */}
-              <div className="lg:col-span-5 grid grid-cols-2 gap-3">
+              <div className="lg:col-span-4 grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Start Date</label>
                   <div className="relative">
@@ -509,15 +716,46 @@ export default function SalesReportDashboard() {
                 </div>
               </div>
 
-              {/* Agent Filter */}
+              {/* Router ID (Company filter equivalent) */}
               <div className="lg:col-span-2">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Agent</label>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Company / Router</label>
+                <select 
+                  value={selectedRouter}
+                  onChange={(e) => setSelectedRouter(e.target.value)}
+                  className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 transition-all cursor-pointer"
+                >
+                  <option value="all">-- All Routers --</option>
+                  <option value="1">Apricom DXB</option>
+                </select>
+              </div>
+
+              {/* Validity Profile */}
+              <div className="lg:col-span-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Validity Profile</label>
+                <select 
+                  value={selectedValidity}
+                  onChange={(e) => setSelectedValidity(e.target.value)}
+                  className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 transition-all cursor-pointer"
+                >
+                  <option value="all">-- All Profiles --</option>
+                  {planOptions.map(days => (
+                    <option key={days} value={days}>{days}-Days</option>
+                  ))}
+                  {planOptions.length === 0 && [7, 10, 15, 30].map(days => (
+                    <option key={days} value={days}>{days}-Days</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Sold By */}
+              <div className="lg:col-span-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Sold By</label>
                 <select 
                   value={selectedAgent}
                   onChange={(e) => setSelectedAgent(e.target.value)}
                   className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 transition-all cursor-pointer"
                 >
-                  <option value="all">All Agents</option>
+                  <option value="all">-- All Users --</option>
                   {agentOptions.map(agent => (
                     <option key={agent} value={agent}>{agent}</option>
                   ))}
@@ -527,55 +765,196 @@ export default function SalesReportDashboard() {
                 </select>
               </div>
 
-              {/* Plan Filter */}
+              {/* Show By Entries count */}
               <div className="lg:col-span-2">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Plan (Days)</label>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Show By</label>
                 <select 
-                  value={selectedValidity}
-                  onChange={(e) => setSelectedValidity(e.target.value)}
+                  value={entriesLimit}
+                  onChange={(e) => setEntriesLimit(Number(e.target.value))}
                   className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 transition-all cursor-pointer"
                 >
-                  <option value="all">All Plans</option>
-                  {planOptions.map(days => (
-                    <option key={days} value={days}>{days} Days</option>
-                  ))}
-                  {planOptions.length === 0 && [7, 10, 15, 30].map(days => (
-                    <option key={days} value={days}>{days} Days</option>
+                  <option value={10}>10 entries</option>
+                  <option value={25}>25 entries</option>
+                  <option value={50}>50 entries</option>
+                  <option value={100}>100 entries</option>
+                  <option value={1000}>1000 entries</option>
+                </select>
+              </div>
+
+              {/* Search button and Export button */}
+              <div className="lg:col-span-10 flex gap-3 justify-end">
+                <button 
+                  type="submit" 
+                  className="bg-[#3958b2] hover:bg-[#2d468f] text-white font-bold px-5 py-2 rounded-lg flex items-center gap-1.5 transition-all shadow-sm text-sm"
+                >
+                  <Search className="h-4 w-4" />
+                  Search
+                </button>
+
+                <button 
+                  type="button"
+                  onClick={resetFilters}
+                  className="bg-slate-200 hover:bg-slate-300 text-slate-700 hover:text-slate-900 px-4 py-2 rounded-lg text-sm font-bold transition-all border border-slate-300"
+                >
+                  Reset
+                </button>
+
+                <button 
+                  type="button"
+                  onClick={handleExportCSV}
+                  className="bg-[#26b048] hover:bg-[#1d8b37] text-white font-bold px-5 py-2 rounded-lg flex items-center gap-1.5 transition-all shadow-sm text-sm"
+                >
+                  <Download className="h-4 w-4" />
+                  Export
+                </button>
+              </div>
+
+            </form>
+          </section>
+        )}
+
+        {/* ── 2. FILTER BAR (Monthly Voucher Sales - Option 2) ────────────── */}
+        {activeTab === "monthly-sales" && (
+          <section className="bg-white border border-[#cfdbe6] rounded-xl p-5 mb-6 shadow-sm">
+            <form onSubmit={handleSearchSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4 items-end">
+              
+              {/* Select Month Calendar */}
+              <div className="lg:col-span-3">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Select Month</label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <input 
+                    type="month" 
+                    value={selectedMonth}
+                    onChange={(e) => setSelectedMonth(e.target.value)}
+                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 pl-10 pr-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 transition-all"
+                  />
+                </div>
+              </div>
+
+              {/* Camps dropdown */}
+              <div className="lg:col-span-3">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Camps</label>
+                <select 
+                  value={selectedRouter}
+                  onChange={(e) => setSelectedRouter(e.target.value)}
+                  className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 transition-all cursor-pointer"
+                >
+                  <option value="all">-- Select Camp --</option>
+                  {campList.map(camp => (
+                    <option key={camp} value={camp}>{camp}</option>
                   ))}
                 </select>
               </div>
 
-              {/* Search text input */}
-              <div className="lg:col-span-3">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Search Customer</label>
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                    <input 
-                      type="text" 
-                      placeholder="Code or Mobile..." 
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 pl-10 pr-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 placeholder-slate-400 transition-all"
-                    />
-                  </div>
-                  
-                  <button 
-                    type="submit" 
-                    className="bg-[#3958b2] hover:bg-[#2d468f] text-white font-bold p-2 rounded-lg flex items-center justify-center transition-all shadow-sm"
-                  >
-                    <Filter className="h-4.5 w-4.5" />
-                  </button>
-                  
-                  <button 
-                    type="button"
-                    onClick={resetFilters}
-                    className="bg-slate-200 hover:bg-slate-300 text-slate-700 hover:text-slate-900 px-3 rounded-lg text-xs font-bold transition-all border border-slate-300"
-                    title="Reset filters"
-                  >
-                    Reset
-                  </button>
+              {/* Submit search button */}
+              <div className="lg:col-span-2">
+                <button 
+                  type="submit" 
+                  className="bg-[#3958b2] hover:bg-[#2d468f] text-white font-bold px-5 py-2.5 rounded-lg flex items-center gap-1.5 transition-all shadow-sm text-sm w-full justify-center"
+                >
+                  <Search className="h-4 w-4" />
+                  Search
+                </button>
+              </div>
+
+              {/* Header metrics pills floated right */}
+              <div className="lg:col-span-4 flex gap-2 justify-end">
+                <div className="bg-[#3958b2]/10 text-[#3958b2] border border-[#3958b2]/20 px-4 py-2.5 rounded-lg text-xs font-black shadow-sm flex items-center gap-1">
+                  <Coins className="h-4 w-4" />
+                  <span>Amount : {monthlyAggregatedTotals.revenue.toLocaleString()}</span>
                 </div>
+                <div className="bg-[#26b048]/10 text-[#26b048] border border-[#26b048]/20 px-4 py-2.5 rounded-lg text-xs font-black shadow-sm flex items-center gap-1">
+                  <TrendingUp className="h-4 w-4" />
+                  <span>Total : {monthlyAggregatedTotals.count}</span>
+                </div>
+              </div>
+
+            </form>
+          </section>
+        )}
+
+        {/* ── 3. FILTER BAR (Voucher Sales Chart - Option 3) ──────────────── */}
+        {activeTab === "sales-chart" && (
+          <section className="bg-white border border-[#cfdbe6] rounded-xl p-5 mb-6 shadow-sm">
+            <form onSubmit={handleSearchSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4 items-end">
+              
+              {/* Start Month and Day */}
+              <div className="lg:col-span-3">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Start Month & Day</label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <input 
+                    type="date" 
+                    value={startMonthDay}
+                    onChange={(e) => setStartMonthDay(e.target.value)}
+                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 pl-10 pr-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 transition-all"
+                  />
+                </div>
+              </div>
+
+              {/* End Day Range */}
+              <div className="lg:col-span-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">End Day Range</label>
+                <select 
+                  value={endDayRange}
+                  onChange={(e) => setEndDayRange(e.target.value)}
+                  className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 transition-all cursor-pointer"
+                >
+                  {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
+                    <option key={day} value={day}>{day}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* No. of Months */}
+              <div className="lg:col-span-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">No. of Months</label>
+                <input 
+                  type="number" 
+                  value={noOfMonths}
+                  onChange={(e) => setNoOfMonths(Number(e.target.value))}
+                  min={1} 
+                  max={36}
+                  className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 transition-all"
+                />
+              </div>
+
+              {/* Company / Router */}
+              <div className="lg:col-span-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Company</label>
+                <select 
+                  value={selectedRouter}
+                  onChange={(e) => setSelectedRouter(e.target.value)}
+                  className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 transition-all cursor-pointer"
+                >
+                  <option value="all">-- All Companies --</option>
+                  <option value="1">Apricom DXB</option>
+                </select>
+              </div>
+
+              {/* Stacked Chart toggle */}
+              <div className="lg:col-span-2 flex items-center gap-2 mb-2 pb-1.5">
+                <input 
+                  type="checkbox" 
+                  id="stacked_chart" 
+                  checked={isStacked}
+                  onChange={(e) => setIsStacked(e.target.checked)}
+                  className="w-4 h-4 text-[#3958b2] border-slate-300 rounded focus:ring-[#3958b2]"
+                />
+                <label htmlFor="stacked_chart" className="text-xs font-bold text-slate-600 cursor-pointer select-none">
+                  Stacked Chart
+                </label>
+              </div>
+
+              {/* Search button */}
+              <div className="lg:col-span-1">
+                <button 
+                  type="submit" 
+                  className="bg-[#3958b2] hover:bg-[#2d468f] text-white font-bold p-2.5 rounded-lg flex items-center justify-center transition-all shadow-sm text-sm w-full"
+                >
+                  <Search className="h-4.5 w-4.5" />
+                </button>
               </div>
 
             </form>
@@ -586,10 +965,10 @@ export default function SalesReportDashboard() {
         {activeTab === "dashboard" && (
           <div className="space-y-6 flex-1 flex flex-col">
             
-            {/* Top Row Cards: Outstanding, Today's Sale, Collection */}
+            {/* Top Row Cards */}
             <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
               
-              {/* Card 1: Outstanding Balance (Total Revenue) */}
+              {/* Card 1: Outstanding Balance */}
               <div className="md:col-span-4 bg-gradient-to-br from-[#35bccc] to-[#3958b2] text-white rounded-xl p-6 shadow-md relative overflow-hidden group min-h-[140px]">
                 <div className="absolute -right-3 -bottom-5 opacity-10 group-hover:scale-110 transition-transform duration-300">
                   <Coins className="h-28 w-28 text-white" />
@@ -689,10 +1068,10 @@ export default function SalesReportDashboard() {
 
             </div>
 
-            {/* Middle Row Section: Agent Analysis (Left) & Slideshow stats (Right) */}
+            {/* Middle Row Section */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-2">
               
-              {/* Left Panel: Agent - Monthly Sales Analysis (5 cols) */}
+              {/* Left Panel: Agent Analysis */}
               <div className="lg:col-span-5 bg-white border border-[#cfdbe6] rounded-xl p-5 shadow-sm flex flex-col">
                 <div className="flex justify-between items-center pb-3 mb-4 border-b border-slate-100">
                   <h4 className="text-sm font-black text-slate-700 uppercase tracking-wider">
@@ -721,7 +1100,7 @@ export default function SalesReportDashboard() {
                         key={agent.name} 
                         onClick={() => {
                           setSelectedAgent(agent.name);
-                          setActiveTab("sales");
+                          setActiveTab("voucher-sales");
                         }}
                         className="grid grid-cols-12 items-center py-2.5 hover:bg-slate-50 rounded-lg px-1 transition-all cursor-pointer text-xs"
                       >
@@ -750,10 +1129,10 @@ export default function SalesReportDashboard() {
                 </div>
               </div>
 
-              {/* Right Panel: Carousel (Slide), Monthly, Last Month Stats (7 cols) */}
+              {/* Right Panel: Carousel and Monthly stats */}
               <div className="lg:col-span-7 grid grid-cols-1 md:grid-cols-2 gap-6">
                 
-                {/* 1. Today Sale Slider Card (red-gradient) */}
+                {/* 1. Today Sale Slider Card */}
                 <div className="bg-gradient-to-br from-[#f53e3b] to-[#ad27a7] text-white rounded-xl p-5 shadow-md flex flex-col justify-between relative overflow-hidden group min-h-[160px]">
                   <div className="absolute -right-3 -bottom-5 opacity-10 group-hover:scale-110 transition-transform duration-300">
                     <TrendingUp className="h-24 w-24 text-white" />
@@ -783,7 +1162,6 @@ export default function SalesReportDashboard() {
                     </div>
                   )}
 
-                  {/* Carousel Page dots indicator */}
                   <div className="flex gap-1.5 justify-center mt-2">
                     {carouselItems.map((_, i) => (
                       <button 
@@ -795,7 +1173,7 @@ export default function SalesReportDashboard() {
                   </div>
                 </div>
 
-                {/* 2. This Month Sales (purple-gradient) */}
+                {/* 2. This Month Sales */}
                 <div className="bg-gradient-to-br from-[#c1129f] via-[#af31da] to-[#862beb] text-white rounded-xl p-5 shadow-md flex flex-col justify-between relative overflow-hidden group min-h-[160px]">
                   <div className="absolute -right-3 -bottom-5 opacity-10 group-hover:scale-110 transition-transform duration-300">
                     <Coins className="h-24 w-24 text-white" />
@@ -822,14 +1200,13 @@ export default function SalesReportDashboard() {
                   </div>
                 </div>
 
-                {/* 3. Last Month Sale & Collection (Full width across md grid columns - 2 columns span) */}
+                {/* 3. Last Month Sale & Collection */}
                 <div className="md:col-span-2 bg-gradient-to-br from-[#35bccc] to-[#3958b2] text-white rounded-xl p-5 shadow-md flex flex-col relative overflow-hidden group">
                   <div className="absolute -right-3 -bottom-5 opacity-10">
                     <Layers className="h-28 w-28 text-white" />
                   </div>
 
                   <div className="grid grid-cols-2 divide-x divide-white/25">
-                    {/* Left block */}
                     <div className="pr-4 py-1.5">
                       <span className="text-xs font-black uppercase tracking-wider opacity-85 block mb-2">Last Month Sale</span>
                       <div className="flex items-baseline gap-1.5">
@@ -844,7 +1221,6 @@ export default function SalesReportDashboard() {
                       <div className="text-[9px] opacity-75 mt-3 font-bold">Updated: End of Month</div>
                     </div>
 
-                    {/* Right block */}
                     <div className="pl-6 py-1.5">
                       <span className="text-xs font-black uppercase tracking-wider opacity-85 block mb-2">Last Month Collection</span>
                       <div className="flex items-baseline gap-1.5">
@@ -862,21 +1238,15 @@ export default function SalesReportDashboard() {
               </div>
             </div>
 
-            {/* Recharts Analytics Charts (Rendered on white cards for clean light mode contrast) */}
+            {/* Recharts Analytics Preview */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-2">
-              
-              {/* Daily sales trend (8 cols) */}
-              <div className="lg:col-span-8 bg-white border border-[#cfdbe6] rounded-xl p-5 shadow-sm flex flex-col h-[350px]">
+              <div className="lg:col-span-8 bg-white border border-[#cfdbe6] rounded-xl p-5 shadow-sm flex flex-col h-[300px]">
                 <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider mb-4 flex items-center gap-2">
                   <TrendingUp className="h-4.5 w-4.5 text-[#3958b2]" />
                   Sales Volume & Revenue Trend
                 </h4>
                 <div className="flex-1 min-h-0">
-                  {loadingSummary ? (
-                    <div className="h-full flex items-center justify-center">
-                      <RefreshCw className="h-6 w-6 animate-spin text-slate-400" />
-                    </div>
-                  ) : summaryData?.trends && summaryData.trends.length > 0 ? (
+                  {summaryData?.trends && summaryData.trends.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={summaryData.trends} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                         <defs>
@@ -888,44 +1258,35 @@ export default function SalesReportDashboard() {
                         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                         <XAxis dataKey="date" stroke="#64748b" fontSize={11} tickLine={false} />
                         <YAxis stroke="#64748b" fontSize={11} tickLine={false} />
-                        <Tooltip 
-                          contentStyle={{ backgroundColor: "#ffffff", borderColor: "#cfdbe6", borderRadius: "8px", color: "#334155" }} 
-                          labelStyle={{ fontWeight: "bold", color: "#3958b2" }}
-                        />
+                        <Tooltip contentStyle={{ backgroundColor: "#ffffff", borderColor: "#cfdbe6", borderRadius: "8px" }} />
                         <Area type="monotone" dataKey="revenue" name="Revenue (AED)" stroke="#3958b2" strokeWidth={2.5} fillOpacity={1} fill="url(#colorRevenue)" />
-                        <Area type="monotone" dataKey="sales" name="Sales (Volume)" stroke="#ad27a7" strokeWidth={1.5} fillOpacity={0} />
                       </AreaChart>
                     </ResponsiveContainer>
                   ) : (
                     <div className="h-full flex items-center justify-center text-slate-400 text-sm italic">
-                      No daily sales records available for chart.
+                      No trend data available.
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Plan Share (4 cols) */}
-              <div className="lg:col-span-4 bg-white border border-[#cfdbe6] rounded-xl p-5 shadow-sm flex flex-col h-[350px]">
+              <div className="lg:col-span-4 bg-white border border-[#cfdbe6] rounded-xl p-5 shadow-sm flex flex-col h-[300px]">
                 <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider mb-4 flex items-center gap-2">
                   <Layers className="h-4.5 w-4.5 text-[#ad27a7]" />
                   Internet Packages Share
                 </h4>
                 <div className="flex-1 min-h-0 flex flex-col justify-center">
-                  {loadingSummary ? (
-                    <div className="h-full flex items-center justify-center">
-                      <RefreshCw className="h-6 w-6 animate-spin text-slate-400" />
-                    </div>
-                  ) : summaryData?.plans && summaryData.plans.length > 0 ? (
+                  {summaryData?.plans && summaryData.plans.length > 0 ? (
                     <div className="flex flex-col items-center justify-center gap-3">
-                      <div className="h-40 w-full">
+                      <div className="h-32 w-full">
                         <ResponsiveContainer width="100%" height="100%">
                           <PieChart>
                             <Pie
                               data={summaryData.plans}
                               cx="50%"
                               cy="50%"
-                              innerRadius={50}
-                              outerRadius={70}
+                              innerRadius={45}
+                              outerRadius={60}
                               paddingAngle={3}
                               dataKey="count"
                               nameKey="planName"
@@ -934,17 +1295,14 @@ export default function SalesReportDashboard() {
                                 <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                               ))}
                             </Pie>
-                            <Tooltip 
-                              contentStyle={{ backgroundColor: "#ffffff", borderColor: "#cfdbe6", borderRadius: "8px", color: "#334155" }}
-                            />
+                            <Tooltip contentStyle={{ backgroundColor: "#ffffff", borderColor: "#cfdbe6" }} />
                           </PieChart>
                         </ResponsiveContainer>
                       </div>
                       
-                      {/* Legends */}
-                      <div className="grid grid-cols-2 gap-2 text-xs w-full px-2">
+                      <div className="grid grid-cols-2 gap-1 text-[10px] w-full px-2">
                         {summaryData.plans.map((entry, index) => (
-                          <div key={entry.planName} className="flex items-center gap-2">
+                          <div key={entry.planName} className="flex items-center gap-1.5">
                             <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COLORS[index % COLORS.length] }}></span>
                             <span className="text-slate-600 font-semibold truncate">{entry.planName} ({entry.count})</span>
                           </div>
@@ -958,80 +1316,111 @@ export default function SalesReportDashboard() {
                   )}
                 </div>
               </div>
-
             </div>
 
           </div>
         )}
 
-        {/* ── TAB CONTENT: SALES LOGS ────────────────────────────────────── */}
-        {activeTab === "sales" && (
+        {/* ── TAB CONTENT: VOUCHER SALES TABLE (Option 1) ──────────────────── */}
+        {activeTab === "voucher-sales" && (
           <div className="bg-white border border-[#cfdbe6] rounded-xl shadow-sm flex-1 flex flex-col min-h-0 overflow-hidden">
             
-            {/* Table Container */}
             <div className="flex-1 overflow-x-auto min-h-0">
-              <table className="w-full text-left border-collapse">
+              <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="border-b border-[#cfdbe6] bg-slate-50">
-                    <th className="px-6 py-4.5 text-xs font-black text-slate-600 uppercase tracking-widest">Date & Time</th>
-                    <th className="px-6 py-4.5 text-xs font-black text-slate-600 uppercase tracking-widest">Voucher Code</th>
-                    <th className="px-6 py-4.5 text-xs font-black text-slate-600 uppercase tracking-widest">Plan Duration</th>
-                    <th className="px-6 py-4.5 text-xs font-black text-slate-600 uppercase tracking-widest">Sold By (Agent)</th>
-                    <th className="px-6 py-4.5 text-xs font-black text-slate-600 uppercase tracking-widest">Customer Mobile</th>
-                    <th className="px-6 py-4.5 text-xs font-black text-slate-600 uppercase tracking-widest">Router ID</th>
-                    <th className="px-6 py-4.5 text-xs font-black text-slate-600 uppercase tracking-widest text-right">Price</th>
+                  <tr className="border-b border-[#cfdbe6] bg-slate-50 font-black text-slate-600">
+                    <th className="px-5 py-4 w-16">Sl. No.</th>
+                    <th className="px-5 py-4">Voucher Name</th>
+                    <th className="px-5 py-4">Mobile</th>
+                    <th className="px-5 py-4 text-right">Amount</th>
+                    <th className="px-5 py-4">Validity Profile</th>
+                    <th className="px-5 py-4">Company</th>
+                    <th className="px-5 py-4">Hotspot</th>
+                    <th className="px-5 py-4">Sold By</th>
+                    <th className="px-5 py-4">Sold Date</th>
+                    <th className="px-5 py-4 text-center">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {loadingSales ? (
                     <tr>
-                      <td colSpan={7} className="px-6 py-20 text-center">
+                      <td colSpan={10} className="px-6 py-20 text-center">
                         <div className="flex flex-col items-center gap-3 justify-center">
                           <RefreshCw className="h-6 w-6 animate-spin text-[#3958b2]" />
-                          <span className="text-slate-500 text-sm">Loading transactions...</span>
+                          <span className="text-slate-500 font-bold">Loading Voucher Sales...</span>
                         </div>
                       </td>
                     </tr>
                   ) : salesData?.sales && salesData.sales.length > 0 ? (
-                    salesData.sales.map((record) => (
-                      <tr key={record.code} className="hover:bg-slate-50/70 transition-all">
-                        <td className="px-6 py-3.5 text-sm text-slate-600 font-semibold whitespace-nowrap">
-                          {record.timestamp}
+                    salesData.sales.map((record, index) => (
+                      <tr key={record.code} className="hover:bg-slate-50/70 transition-all font-medium text-slate-700">
+                        <td className="px-5 py-3 text-slate-400 font-bold">
+                          {((salesPage - 1) * entriesLimit) + index + 1}
                         </td>
-                        <td className="px-6 py-3.5 text-sm font-mono text-[#3958b2] font-black tracking-wider select-all whitespace-nowrap">
+                        <td className="px-5 py-3 font-mono text-[#3958b2] font-black tracking-wider select-all">
                           {record.code}
                         </td>
-                        <td className="px-6 py-3.5 text-sm font-bold whitespace-nowrap">
-                          <span className="bg-[#ad27a7]/10 text-[#ad27a7] border border-[#ad27a7]/20 px-2.5 py-0.5 rounded-md text-xs font-extrabold">
-                            {record.validity} Days
-                          </span>
-                        </td>
-                        <td className="px-6 py-3.5 text-sm font-bold whitespace-nowrap">
-                          {record.seller ? (
-                            <span className="text-slate-700">{record.seller}</span>
-                          ) : (
-                            <span className="text-slate-400 italic">Direct / System</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-3.5 text-sm font-mono text-slate-600 select-all whitespace-nowrap">
+                        <td className="px-5 py-3 font-mono select-all">
                           {record.mobile || "—"}
                         </td>
-                        <td className="px-6 py-3.5 text-xs text-slate-500 font-mono whitespace-nowrap">
+                        <td className="px-5 py-3 text-right font-black text-[#3958b2]">
+                          AED {record.price.toFixed(2)}
+                        </td>
+                        <td className="px-5 py-3 font-bold">
+                          <span className="bg-[#ad27a7]/10 text-[#ad27a7] border border-[#ad27a7]/20 px-2.5 py-0.5 rounded-md text-[10px] font-extrabold whitespace-nowrap">
+                            {record.validity}-Days
+                          </span>
+                        </td>
+                        <td className="px-5 py-3 font-bold text-slate-500">
+                          Apricom DXB
+                        </td>
+                        <td className="px-5 py-3 font-semibold text-slate-600 truncate max-w-[150px]">
                           {record.routerId}
                         </td>
-                        <td className="px-6 py-3.5 text-sm font-black text-[#3958b2] text-right whitespace-nowrap">
-                          AED {record.price}
+                        <td className="px-5 py-3 font-bold">
+                          {record.seller || <span className="text-slate-400 italic font-normal">Direct / System</span>}
+                        </td>
+                        <td className="px-5 py-3 font-semibold text-slate-500 whitespace-nowrap">
+                          {record.timestamp}
+                        </td>
+                        <td className="px-5 py-3 text-center">
+                          <button className="text-slate-400 hover:text-slate-700 p-1 transition-colors">
+                            <CogIcon className="h-4.5 w-4.5 mx-auto" />
+                          </button>
                         </td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={7} className="px-6 py-16 text-center text-slate-400 text-sm italic">
+                      <td colSpan={10} className="px-6 py-16 text-center text-slate-400 italic">
                         No sales transactions match the filtered criteria.
                       </td>
                     </tr>
                   )}
                 </tbody>
+                
+                {!loadingSales && salesData?.sales && salesData.sales.length > 0 && (
+                  <tfoot className="bg-slate-50 border-t border-[#cfdbe6] font-bold text-slate-700 text-xs">
+                    <tr className="border-b border-[#cfdbe6]">
+                      <td colSpan={3} className="px-5 py-2.5 text-right font-extrabold">
+                        Total
+                      </td>
+                      <td className="px-5 py-2.5 text-right font-black text-sky-600">
+                        AED {pageTotalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td colSpan={6}></td>
+                    </tr>
+                    <tr>
+                      <td colSpan={3} className="px-5 py-2.5 text-right font-extrabold">
+                        Grand Total
+                      </td>
+                      <td className="px-5 py-2.5 text-right font-black text-[#26b048]">
+                        AED {summaryData?.summary.totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || pageTotalRevenue.toLocaleString()}
+                      </td>
+                      <td colSpan={6}></td>
+                    </tr>
+                  </tfoot>
+                )}
               </table>
             </div>
 
@@ -1039,7 +1428,7 @@ export default function SalesReportDashboard() {
             {salesData?.pagination && salesData.pagination.totalPages > 1 && (
               <div className="bg-slate-50 px-6 py-4 border-t border-[#cfdbe6] flex items-center justify-between">
                 <span className="text-xs text-slate-500 font-semibold">
-                  Showing Page <strong className="text-slate-800">{salesData.pagination.page}</strong> of <strong className="text-slate-800">{salesData.pagination.totalPages}</strong> ({salesData.pagination.totalCount} total sales)
+                  Showing {((salesPage - 1) * entriesLimit) + 1} to {Math.min(salesPage * entriesLimit, salesData.pagination.totalCount)} of {salesData.pagination.totalCount} entries
                 </span>
                 
                 <div className="flex gap-2">
@@ -1063,6 +1452,101 @@ export default function SalesReportDashboard() {
               </div>
             )}
 
+          </div>
+        )}
+
+        {/* ── TAB CONTENT: MONTHLY DAILY SALES CHART (Option 2) ───────────── */}
+        {activeTab === "monthly-sales" && (
+          <div className="bg-white border border-[#cfdbe6] rounded-xl p-6 shadow-sm flex flex-col h-[450px]">
+            <div className="pb-3 mb-4 border-b border-slate-100 flex justify-between items-center">
+              <h5 className="text-sm font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                <TrendingUp className="h-4.5 w-4.5 text-[#3958b2]" />
+                Daily Sales Count for Month ({selectedMonth})
+              </h5>
+              <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+                <span className="w-3.5 h-3.5 bg-[#3958b2] rounded"></span>
+                <span>Sales Count</span>
+              </div>
+            </div>
+            
+            <div className="flex-1 min-h-0">
+              {loadingSummary ? (
+                <div className="h-full flex items-center justify-center">
+                  <RefreshCw className="h-6 w-6 animate-spin text-slate-400" />
+                </div>
+              ) : monthlyDailyTrends.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={monthlyDailyTrends} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                    <XAxis dataKey="date" stroke="#64748b" fontSize={11} tickLine={false} />
+                    <YAxis stroke="#64748b" fontSize={11} tickLine={false} />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: "#ffffff", borderColor: "#cfdbe6", borderRadius: "8px", color: "#334155" }}
+                      labelStyle={{ fontWeight: "bold", color: "#3958b2" }}
+                    />
+                    <Bar dataKey="sales" name="Sales Count" fill="#3958b2" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full flex items-center justify-center text-slate-400 text-sm italic">
+                  No sales logged for this month.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── TAB CONTENT: CAMPS MONTHLY STACKED CHART (Option 3) ──────────── */}
+        {activeTab === "sales-chart" && (
+          <div className="bg-white border border-[#cfdbe6] rounded-xl p-6 shadow-sm flex flex-col h-[480px]">
+            <div className="pb-3 mb-4 border-b border-slate-100 flex justify-between items-center">
+              <h5 className="text-sm font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                <Layers className="h-4.5 w-4.5 text-[#3958b2]" />
+                Camps - Monthly Voucher Sales Revenue
+              </h5>
+              <div className="text-xs text-slate-500 font-bold">
+                Date Range: {startDate} to {endDate}
+              </div>
+            </div>
+
+            <div className="flex-1 min-h-0">
+              {loadingSales ? (
+                <div className="h-full flex items-center justify-center">
+                  <RefreshCw className="h-6 w-6 animate-spin text-slate-400" />
+                </div>
+              ) : campChartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={campChartData} margin={{ top: 10, right: 10, left: -10, bottom: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                    <XAxis dataKey="month" stroke="#64748b" fontSize={11} tickLine={false} label={{ value: 'Year | Month', position: 'bottom', offset: 5, fill: '#334155', fontWeight: 'bold' }} />
+                    <YAxis stroke="#64748b" fontSize={11} tickLine={false} label={{ value: 'Sales Amount (AED)', angle: -90, position: 'left', offset: 0, fill: '#334155', fontWeight: 'bold' }} />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: "#ffffff", borderColor: "#cfdbe6", borderRadius: "8px", color: "#334155" }}
+                    />
+                    <Legend verticalAlign="top" height={36} />
+                    
+                    {/* Render separate bar for each camp */}
+                    {campList.map((camp, index) => (
+                      <Bar 
+                        key={camp} 
+                        dataKey={camp} 
+                        name={camp} 
+                        fill={campColors[index % campColors.length]} 
+                        stackId={isStacked ? "camp-stack" : undefined}
+                        radius={isStacked ? [0, 0, 0, 0] : [4, 4, 0, 0]}
+                      />
+                    ))}
+
+                    {/* Total overlay line */}
+                    <Line type="monotone" dataKey="Total" name="Total Revenue" stroke="#109618" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full flex items-center justify-center text-slate-400 text-sm italic">
+                  No sales logged within this range to plot camp shares.
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -1117,7 +1601,7 @@ export default function SalesReportDashboard() {
                           <button 
                             onClick={() => {
                               setSelectedAgent(agent.name);
-                              setActiveTab("sales");
+                              setActiveTab("voucher-sales");
                             }}
                             className="bg-[#3958b2]/10 hover:bg-[#3958b2]/20 text-[#3958b2] border border-[#3958b2]/20 px-4 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm"
                           >
