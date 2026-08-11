@@ -64,6 +64,7 @@ type Tab =
   | "expenses-list"
   | "expenses-new"
   | "expenses-common-new"
+  | "change-password"
   | "agents" 
   | "pricing";
 
@@ -277,6 +278,19 @@ export default function SalesReportDashboard() {
   // Custom pricing edit state
   const [editPriceMap, setEditPriceMap] = useState<Record<number, string>>({});
 
+  // Auth & Profile states
+  const [isLoggedIn, setIsLoggedIn] = useState(true);
+  const [authUsername, setAuthUsername] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
+  const [authError, setAuthError] = useState("");
+
+  // Change Password form states
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
+
   // Initialize dates: default to current month
   useEffect(() => {
     setIsMounted(true);
@@ -333,10 +347,73 @@ export default function SalesReportDashboard() {
   useEffect(() => {
     const handleOutsideClick = () => {
       setActiveDropdown(null);
+      setIsProfileDropdownOpen(false);
     };
     window.addEventListener("click", handleOutsideClick);
     return () => window.removeEventListener("click", handleOutsideClick);
   }, []);
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword !== confirmPassword) {
+      alert("New password and confirm password do not match");
+      return;
+    }
+    setChangingPassword(true);
+    try {
+      const res = await fetch("/api/reports/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "change-password",
+          username: "iqbaal",
+          currentPassword,
+          newPassword
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert("Password updated successfully!");
+        setCurrentPassword("");
+        setNewPassword("");
+        setConfirmPassword("");
+        setActiveTab("dashboard");
+      } else {
+        alert(data.error || "Failed to update password");
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setChangingPassword(false);
+    }
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError("");
+    try {
+      const res = await fetch("/api/reports/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "login",
+          username: authUsername,
+          password: authPassword
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setIsLoggedIn(true);
+        setAuthUsername("");
+        setAuthPassword("");
+      } else {
+        setAuthError(data.error || "Invalid credentials");
+      }
+    } catch (err) {
+      console.error(err);
+      setAuthError("Failed to authenticate");
+    }
+  };
 
   // Fetch summary stats
   const fetchSummary = async () => {
@@ -1502,6 +1579,63 @@ export default function SalesReportDashboard() {
     setActiveDropdown((prev) => (prev === type ? null : type));
   };
 
+  if (!isLoggedIn) {
+    return (
+      <div className="min-h-screen bg-[#d5e5f4] flex items-center justify-center font-sans p-6">
+        <div className="bg-white border border-[#cfdbe6] rounded-xl shadow-2xl p-8 w-[400px] flex flex-col text-slate-800">
+          <div className="flex items-center gap-2 justify-center mb-6">
+            <div className="bg-[#ffbc36] text-white h-9 w-9 rounded-lg flex items-center justify-center font-black text-xl shadow-md">
+              S
+            </div>
+            <span className="font-extrabold text-[#3958b2] text-xl tracking-wider">SMARTWIFI</span>
+          </div>
+
+          <h4 className="font-black text-slate-700 text-center text-sm uppercase tracking-wide mb-6">
+            Sign In to Admin Portal
+          </h4>
+
+          {authError && (
+            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-2.5 rounded-lg text-xs font-bold mb-4">
+              {authError}
+            </div>
+          )}
+
+          <form onSubmit={handleLogin} className="space-y-4 text-xs font-bold text-slate-600">
+            <div>
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Username</label>
+              <input 
+                type="text" 
+                value={authUsername}
+                onChange={(e) => setAuthUsername(e.target.value)}
+                className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2.5 rounded-lg text-sm font-bold outline-none text-slate-800"
+                placeholder="e.g. iqbaal"
+                required
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Password</label>
+              <input 
+                type="password" 
+                value={authPassword}
+                onChange={(e) => setAuthPassword(e.target.value)}
+                className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2.5 rounded-lg text-sm font-bold outline-none text-slate-800"
+                placeholder="Password"
+                required
+              />
+            </div>
+
+            <button 
+              type="submit"
+              className="w-full py-2.5 bg-[#3958b2] hover:bg-[#2d468f] text-white rounded-lg transition-all shadow-md font-black uppercase tracking-wider text-xs"
+            >
+              Log In
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#d5e5f4] text-[#212529] font-sans flex flex-col">
       
@@ -1517,14 +1651,35 @@ export default function SalesReportDashboard() {
         </div>
         
         {/* User profile details in top right */}
-        <div className="flex items-center gap-3 cursor-pointer group">
-          <div className="h-9 w-9 rounded-full bg-[#3958b2] text-white flex items-center justify-center font-bold text-sm uppercase">
-            IQ
+        <div className="relative">
+          <div 
+            onClick={(e) => { e.stopPropagation(); setIsProfileDropdownOpen(!isProfileDropdownOpen); }}
+            className="flex items-center gap-3 cursor-pointer group select-none"
+          >
+            <div className="h-9 w-9 rounded-full bg-[#3958b2] text-white flex items-center justify-center font-bold text-sm uppercase">
+              IQ
+            </div>
+            <div className="hidden sm:block text-right">
+              <span className="font-bold text-sm text-[#333] block">iqbaal</span>
+            </div>
+            <ChevronDown className="h-4 w-4 text-[#888] group-hover:text-[#333] transition-colors" />
           </div>
-          <div className="hidden sm:block text-right">
-            <span className="font-bold text-sm text-[#333] block">iqbaal</span>
-          </div>
-          <ChevronDown className="h-4 w-4 text-[#888] group-hover:text-[#333] transition-colors" />
+          {isProfileDropdownOpen && (
+            <div className="absolute top-full right-0 mt-2 bg-white border border-[#cfdbe6] rounded-md shadow-lg min-w-[160px] z-50 flex flex-col py-1 font-bold text-xs text-slate-700">
+              <button 
+                onClick={() => { setActiveTab("change-password"); setIsProfileDropdownOpen(false); }}
+                className="px-4 py-2.5 hover:text-[#1e3c72] hover:bg-[#bfebff]/30 text-left w-full transition-all"
+              >
+                Change Password
+              </button>
+              <button 
+                onClick={() => { setIsLoggedIn(false); setIsProfileDropdownOpen(false); }}
+                className="px-4 py-2.5 text-red-500 hover:text-red-700 hover:bg-red-50 text-left w-full transition-all border-t border-slate-100"
+              >
+                Logout
+              </button>
+            </div>
+          )}
         </div>
       </header>
 
@@ -3191,6 +3346,64 @@ export default function SalesReportDashboard() {
                   className="px-6 py-2 bg-[#3958b2] hover:bg-[#2d468f] text-white rounded-lg transition-all shadow-md"
                 >
                   Save Common Expense
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* ── TAB CONTENT: CHANGE PASSWORD ───────────────────────────────── */}
+        {activeTab === "change-password" && (
+          <div className="bg-white border border-[#cfdbe6] rounded-xl shadow-sm max-w-md mx-auto p-6 mt-4 w-full">
+            <h4 className="font-black text-[#3958b2] text-sm uppercase tracking-wide border-b border-slate-100 pb-3 mb-6">
+              Change Password
+            </h4>
+            <form onSubmit={handleChangePassword} className="space-y-4 text-xs font-bold text-slate-600">
+              <div>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Current Password</label>
+                <input 
+                  type="password" 
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2.5 rounded-lg text-sm outline-none text-slate-800"
+                  required
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">New Password</label>
+                <input 
+                  type="password" 
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2.5 rounded-lg text-sm outline-none text-slate-800"
+                  required
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Confirm New Password</label>
+                <input 
+                  type="password" 
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2.5 rounded-lg text-sm outline-none text-slate-800"
+                  required
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                <button 
+                  type="button"
+                  onClick={() => setActiveTab("dashboard")}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-250 border border-slate-300 text-slate-700 rounded-lg transition-all"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit"
+                  disabled={changingPassword}
+                  className="px-6 py-2 bg-[#3958b2] hover:bg-[#2d468f] text-white rounded-lg transition-all shadow-md disabled:opacity-50"
+                >
+                  {changingPassword ? "Saving..." : "Save Changes"}
                 </button>
               </div>
             </form>

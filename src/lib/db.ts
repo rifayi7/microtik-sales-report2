@@ -189,6 +189,15 @@ export function getDB(): DatabaseSync {
     );
   `);
 
+  // Create users table for authentication
+  dbInstance.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT NOT NULL UNIQUE,
+      password TEXT NOT NULL
+    );
+  `);
+
   // Seed default expenses
   const checkExpenses = dbInstance.prepare("SELECT COUNT(*) as count FROM expenses");
   const expensesCount = (checkExpenses.get() as { count: number }).count;
@@ -199,6 +208,14 @@ export function getDB(): DatabaseSync {
     `);
     insertExpense.run("Apricom DXB", null, "Office Rent", "Landlord Ltd", "2026-08-01", "Akif", 12000.00, "Rent for Aug 2026");
     insertExpense.run(null, "Hardware Purchase", "Office Equipment", "Supplier XYZ", "2026-08-05", "Muzain", 1500.00, "Bought 10 routers");
+  }
+
+  // Seed default credentials
+  const checkUsers = dbInstance.prepare("SELECT COUNT(*) as count FROM users");
+  const usersCount = (checkUsers.get() as { count: number }).count;
+  if (usersCount === 0) {
+    const insertUser = dbInstance.prepare("INSERT OR IGNORE INTO users (username, password) VALUES (?, ?)");
+    insertUser.run("iqbaal", "admin");
   }
 
   // Seed default pricing if none exists
