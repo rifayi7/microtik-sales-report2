@@ -280,6 +280,7 @@ export default function SalesReportDashboard() {
 
   // Auth & Profile states
   const [isLoggedIn, setIsLoggedIn] = useState(true);
+  const [loggedInUser, setLoggedInUser] = useState("admin");
   const [authUsername, setAuthUsername] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
@@ -366,7 +367,7 @@ export default function SalesReportDashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "change-password",
-          username: "iqbaal",
+          username: loggedInUser,
           currentPassword,
           newPassword
         })
@@ -404,6 +405,7 @@ export default function SalesReportDashboard() {
       const data = await res.json();
       if (data.success) {
         setIsLoggedIn(true);
+        setLoggedInUser(data.username);
         setAuthUsername("");
         setAuthPassword("");
       } else {
@@ -1657,10 +1659,10 @@ export default function SalesReportDashboard() {
             className="flex items-center gap-3 cursor-pointer group select-none"
           >
             <div className="h-9 w-9 rounded-full bg-[#3958b2] text-white flex items-center justify-center font-bold text-sm uppercase">
-              IQ
+              {loggedInUser.substring(0, 2).toUpperCase()}
             </div>
             <div className="hidden sm:block text-right">
-              <span className="font-bold text-sm text-[#333] block">iqbaal</span>
+              <span className="font-bold text-sm text-[#333] block">{loggedInUser}</span>
             </div>
             <ChevronDown className="h-4 w-4 text-[#888] group-hover:text-[#333] transition-colors" />
           </div>
