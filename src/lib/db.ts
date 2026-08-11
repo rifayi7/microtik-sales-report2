@@ -174,6 +174,33 @@ export function getDB(): DatabaseSync {
     insertPayment.run("sales_agent_2", "Hassani 2", "2026-08", 250.0, "admin", "Manual", "2026-08-10", "14:20:00", 0);
   }
 
+  // Create expenses table
+  dbInstance.exec(`
+    CREATE TABLE IF NOT EXISTS expenses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      company_name TEXT,
+      common_category TEXT,
+      expense_category TEXT NOT NULL,
+      supplier_name TEXT,
+      expense_date TEXT NOT NULL,
+      expense_by TEXT NOT NULL,
+      amount REAL NOT NULL,
+      description TEXT
+    );
+  `);
+
+  // Seed default expenses
+  const checkExpenses = dbInstance.prepare("SELECT COUNT(*) as count FROM expenses");
+  const expensesCount = (checkExpenses.get() as { count: number }).count;
+  if (expensesCount === 0) {
+    const insertExpense = dbInstance.prepare(`
+      INSERT OR IGNORE INTO expenses (company_name, common_category, expense_category, supplier_name, expense_date, expense_by, amount, description)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    insertExpense.run("Apricom DXB", null, "Office Rent", "Landlord Ltd", "2026-08-01", "Akif", 12000.00, "Rent for Aug 2026");
+    insertExpense.run(null, "Hardware Purchase", "Office Equipment", "Supplier XYZ", "2026-08-05", "Muzain", 1500.00, "Bought 10 routers");
+  }
+
   // Seed default pricing if none exists
   const checkPricing = dbInstance.prepare("SELECT COUNT(*) as count FROM sales_pricing");
   const countRow = checkPricing.get() as { count: number } | undefined;

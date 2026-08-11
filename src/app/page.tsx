@@ -61,6 +61,9 @@ type Tab =
   | "notifications"
   | "payments-list"
   | "collected-payments"
+  | "expenses-list"
+  | "expenses-new"
+  | "expenses-common-new"
   | "agents" 
   | "pricing";
 
@@ -109,6 +112,18 @@ interface PricingData {
 }
 
 const COLORS = ["#3958b2", "#26b048", "#ff6228", "#ad27a7", "#862beb", "#35bccc", "#ffbc36"];
+
+const STAFF_LIST = [
+  "Akif", "Bin laden", "binladan", "Cam2", "camp3new", "casmp1", 
+  "iqbalapricom", "kokan", "Mamoolik", "muz2", "Muzain", "Muzain User 1", 
+  "muzain-serc", "muzain3", "muzainsecuri", "rahul", "Rathilal", "Rimal-1", 
+  "saif", "Security YSG 2", "shahid1", "Vishnu Staff", "wenz2", "ysg1", "ysg2"
+];
+
+const COMPANIES = ["Apricom DXB", "Apricom KSA"];
+const EXPENSE_CATEGORIES = ["Office Rent", "Router Purchase", "Fuel / Transportation", "Internet bill", "Salary", "Other / General"];
+const COMMON_CATEGORIES = ["Office Equipment", "Office Stationeries", "Repairs & Maintenance", "Team Outings"];
+const SUPPLIERS = ["Landlord Ltd", "Supplier XYZ", "Hardware Supplier A", "Gas Station", "Telcom Co"];
 
 export default function SalesReportDashboard() {
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
@@ -214,6 +229,33 @@ export default function SalesReportDashboard() {
   const [loadingCollected, setLoadingCollected] = useState(false);
   const [collectedSearch, setCollectedSearch] = useState("");
 
+  // Tab 16, 17, 18: Expenses Specific States
+  const [expensesList, setExpensesList] = useState<any[]>([]);
+  const [loadingExpenses, setLoadingExpenses] = useState(false);
+  const [expenseSearch, setExpenseSearch] = useState("");
+  const [expenseCompanyFilter, setExpenseCompanyFilter] = useState("all");
+  const [expenseCategoryFilter, setExpenseCategoryFilter] = useState("all");
+
+  const [regExpense, setRegExpense] = useState({
+    expense_category: "Office Rent",
+    company_name: "Apricom DXB",
+    supplier_name: "Landlord Ltd",
+    expense_date: "",
+    expense_by: "Akif",
+    amount: 0,
+    description: ""
+  });
+
+  const [commExpense, setCommExpense] = useState({
+    expense_category: "Office Rent",
+    common_category: "Office Equipment",
+    supplier_name: "Supplier XYZ",
+    expense_date: "",
+    expense_by: "Muzain",
+    amount: 0,
+    description: ""
+  });
+
   // API Data State
   const [summaryData, setSummaryData] = useState<SummaryData | null>(null);
   const [salesData, setSalesData] = useState<SalesData | null>(null);
@@ -230,7 +272,7 @@ export default function SalesReportDashboard() {
   const [carouselIndex, setCarouselIndex] = useState(0);
 
   // Dropdown States for Header Navigation
-  const [activeDropdown, setActiveDropdown] = useState<"sales" | "reports" | "masters" | "payments" | null>(null);
+  const [activeDropdown, setActiveDropdown] = useState<"sales" | "reports" | "masters" | "payments" | "expenses" | null>(null);
 
   // Custom pricing edit state
   const [editPriceMap, setEditPriceMap] = useState<Record<number, string>>({});
@@ -248,8 +290,12 @@ export default function SalesReportDashboard() {
       return `${year}-${month}-${day}`;
     };
 
+    const todayStr = formatDate(now);
     setStartDate(formatDate(firstDay));
-    setEndDate(formatDate(now));
+    setEndDate(todayStr);
+    
+    setRegExpense(prev => ({ ...prev, expense_date: todayStr }));
+    setCommExpense(prev => ({ ...prev, expense_date: todayStr }));
   }, []);
 
   // Sync Monthly Voucher Sales filter to startDate/endDate
@@ -623,6 +669,30 @@ export default function SalesReportDashboard() {
     }
   };
 
+  // Fetch Expenses List
+  const fetchExpenses = async () => {
+    if (!isMounted) return;
+    setLoadingExpenses(true);
+    try {
+      const params = new URLSearchParams();
+      if (expenseSearch) params.append("search", expenseSearch);
+      if (expenseCompanyFilter && expenseCompanyFilter !== "all") params.append("company", expenseCompanyFilter);
+      if (expenseCategoryFilter && expenseCategoryFilter !== "all") params.append("category", expenseCategoryFilter);
+      if (startDate) params.append("startDate", startDate);
+      if (endDate) params.append("endDate", endDate);
+
+      const res = await fetch(`/api/reports/expenses?${params.toString()}`);
+      const data = await res.json();
+      if (data.success) {
+        setExpensesList(data.data);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingExpenses(false);
+    }
+  };
+
   // Fetch pricing configuration
   const fetchPricing = async () => {
     if (!isMounted) return;
@@ -958,6 +1028,75 @@ export default function SalesReportDashboard() {
     }
   };
 
+  // Save Regular Expense form
+  const handleSaveRegularExpense = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!regExpense.expense_category || !regExpense.expense_date || !regExpense.expense_by || regExpense.amount <= 0) {
+      alert("Please fill in all required fields and enter amount > 0");
+      return;
+    }
+    try {
+      const res = await fetch("/api/reports/expenses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(regExpense)
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert("Regular expense saved successfully!");
+        setActiveTab("expenses-list");
+      } else {
+        alert(data.error || "Failed to save regular expense");
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Save Common Expense form
+  const handleSaveCommonExpense = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!commExpense.expense_category || !commExpense.expense_date || !commExpense.expense_by || commExpense.amount <= 0) {
+      alert("Please fill in all required fields and enter amount > 0");
+      return;
+    }
+    try {
+      const payload = { ...commExpense, company_name: null };
+      const res = await fetch("/api/reports/expenses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert("Common expense saved successfully!");
+        setActiveTab("expenses-list");
+      } else {
+        alert(data.error || "Failed to save common expense");
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Delete Expense record
+  const handleDeleteExpense = async (id: number) => {
+    if (!confirm("Are you sure?")) return;
+    try {
+      const res = await fetch("/api/reports/expenses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, action: "delete" })
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchExpenses();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   // Re-fetch when filters, limit, or active tab changes
   useEffect(() => {
     if (!isMounted) return;
@@ -996,6 +1135,8 @@ export default function SalesReportDashboard() {
       fetchPayments();
     } else if (activeTab === "collected-payments") {
       fetchCollectedPayments();
+    } else if (activeTab === "expenses-list") {
+      fetchExpenses();
     } else if (activeTab === "agents") {
       fetchSummary();
     } else if (activeTab === "pricing") {
@@ -1028,6 +1169,9 @@ export default function SalesReportDashboard() {
     paymentCampFilter,
     paymentPaidYearMonth,
     collectedSearch,
+    expenseSearch,
+    expenseCompanyFilter,
+    expenseCategoryFilter,
     isMounted
   ]);
 
@@ -1103,6 +1247,9 @@ export default function SalesReportDashboard() {
     setPaymentCampFilter("all");
     setPaymentPaidYearMonth("");
     setCollectedSearch("");
+    setExpenseSearch("");
+    setExpenseCompanyFilter("all");
+    setExpenseCategoryFilter("all");
     setSelectedMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`);
     setStartMonthDay(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-05`);
   };
@@ -1222,10 +1369,7 @@ export default function SalesReportDashboard() {
   const campChartData = useMemo(() => {
     if (!salesData?.sales) return [];
     
-    // 1. Get all unique router IDs (Camps)
     const routers = Array.from(new Set(salesData.sales.map(s => s.routerId || "Direct/System")));
-    
-    // 2. Group by Month (YYYY-MM)
     const groups: Record<string, any> = {};
     
     salesData.sales.forEach(sale => {
@@ -1254,7 +1398,7 @@ export default function SalesReportDashboard() {
     return Object.values(groups).sort((a: any, b: any) => a.month.localeCompare(b.month));
   }, [salesData]);
 
-  // Dynamic colors list for stack bars and variables definition
+  // Dynamic variables definition
   const campColors = COLORS;
   const agentOptions = salesData?.filters?.agents || [];
   const planOptions = salesData?.filters?.plans || [];
@@ -1349,7 +1493,11 @@ export default function SalesReportDashboard() {
     return collectedList.reduce((sum, item) => sum + item.amount, 0);
   }, [collectedList]);
 
-  const handleDropdownToggle = (e: React.MouseEvent, type: "sales" | "reports" | "masters" | "payments") => {
+  const expensesTotals = useMemo(() => {
+    return expensesList.reduce((sum, item) => sum + item.amount, 0);
+  }, [expensesList]);
+
+  const handleDropdownToggle = (e: React.MouseEvent, type: "sales" | "reports" | "masters" | "payments" | "expenses") => {
     e.stopPropagation();
     setActiveDropdown((prev) => (prev === type ? null : type));
   };
@@ -1435,14 +1583,45 @@ export default function SalesReportDashboard() {
             )}
           </li>
 
-          <li>
-            <span className="flex items-center gap-2 px-3.5 py-1.5 text-slate-400 cursor-not-allowed opacity-50">
+          {/* Dropdown 2: Expenses */}
+          <li className="relative overflow-visible">
+            <button 
+              onClick={(e) => handleDropdownToggle(e, "expenses")} 
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-md transition-all ${
+                ["expenses-list", "expenses-new", "expenses-common-new"].includes(activeTab)
+                  ? "text-[#1e3c72] bg-white/60 shadow-sm" 
+                  : "text-[#4a6b82] hover:text-[#1e3c72]"
+              }`}
+            >
               <BookOpen className="h-4 w-4" />
               Expenses
-            </span>
+              <ChevronDown className="h-3.5 w-3.5" />
+            </button>
+            {activeDropdown === "expenses" && (
+              <div className="absolute top-full left-0 mt-1 bg-white border border-[#cfdbe6] rounded-md shadow-md min-w-[200px] z-50 flex flex-col py-1">
+                <button 
+                  onClick={() => { setActiveTab("expenses-list"); setActiveDropdown(null); }}
+                  className="px-4 py-2 text-xs sm:text-sm font-semibold text-[#4a6b82] hover:text-[#1e3c72] hover:bg-[#bfebff]/30 text-left w-full transition-all"
+                >
+                  List Expense
+                </button>
+                <button 
+                  onClick={() => { setActiveTab("expenses-new"); setActiveDropdown(null); }}
+                  className="px-4 py-2 text-xs sm:text-sm font-semibold text-[#4a6b82] hover:text-[#1e3c72] hover:bg-[#bfebff]/30 text-left w-full transition-all"
+                >
+                  New Expense
+                </button>
+                <button 
+                  onClick={() => { setActiveTab("expenses-common-new"); setActiveDropdown(null); }}
+                  className="px-4 py-2 text-xs sm:text-sm font-semibold text-[#4a6b82] hover:text-[#1e3c72] hover:bg-[#bfebff]/30 text-left w-full transition-all"
+                >
+                  New Common Expense
+                </button>
+              </div>
+            )}
           </li>
           
-          {/* Dropdown 2: Payments */}
+          {/* Dropdown 3: Payments */}
           <li className="relative overflow-visible">
             <button 
               onClick={(e) => handleDropdownToggle(e, "payments")} 
@@ -1474,7 +1653,7 @@ export default function SalesReportDashboard() {
             )}
           </li>
           
-          {/* Dropdown 3: Reports */}
+          {/* Dropdown 4: Reports */}
           <li className="relative overflow-visible">
             <button 
               onClick={(e) => handleDropdownToggle(e, "reports")} 
@@ -1532,7 +1711,7 @@ export default function SalesReportDashboard() {
             )}
           </li>
 
-          {/* Dropdown 4: Masters */}
+          {/* Dropdown 5: Masters */}
           <li className="relative overflow-visible">
             <button 
               onClick={(e) => handleDropdownToggle(e, "masters")} 
@@ -1614,6 +1793,9 @@ export default function SalesReportDashboard() {
             {activeTab === "notifications" && "Notifications Master"}
             {activeTab === "payments-list" && "Payments Log"}
             {activeTab === "collected-payments" && "Collected Payments"}
+            {activeTab === "expenses-list" && "Expenses Log"}
+            {activeTab === "expenses-new" && "New Expense"}
+            {activeTab === "expenses-common-new" && "New Common Expense"}
             {activeTab === "agents" && "Agent Performance Leaderboard"}
             {activeTab === "pricing" && "Pricing Settings"}
           </h3>
@@ -2576,6 +2758,93 @@ export default function SalesReportDashboard() {
           </section>
         )}
 
+        {/* ── 14. FILTER BAR (Expenses Log / List Expense) ────────────────── */}
+        {activeTab === "expenses-list" && (
+          <section className="bg-white border border-[#cfdbe6] rounded-xl p-5 mb-6 shadow-sm">
+            <form onSubmit={(e) => { e.preventDefault(); fetchExpenses(); }} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4 items-end">
+              
+              {/* Keyword Search */}
+              <div className="lg:col-span-3">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Search Keyword</label>
+                <input 
+                  type="text" 
+                  placeholder="Search Here" 
+                  value={expenseSearch}
+                  onChange={(e) => setExpenseSearch(e.target.value)}
+                  className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 placeholder-slate-400 transition-all"
+                />
+              </div>
+
+              {/* Date Filters */}
+              <div className="lg:col-span-4 grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Start Date</label>
+                  <input 
+                    type="date" 
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">End Date</label>
+                  <input 
+                    type="date" 
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 transition-all"
+                  />
+                </div>
+              </div>
+
+              {/* Company Selector */}
+              <div className="lg:col-span-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Company</label>
+                <select 
+                  value={expenseCompanyFilter}
+                  onChange={(e) => setExpenseCompanyFilter(e.target.value)}
+                  className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 cursor-pointer"
+                >
+                  <option value="all">-- All Companies --</option>
+                  {COMPANIES.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                  <option value="common">Common (No Company)</option>
+                </select>
+              </div>
+
+              {/* Category Selector */}
+              <div className="lg:col-span-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Category</label>
+                <select 
+                  value={expenseCategoryFilter}
+                  onChange={(e) => setExpenseCategoryFilter(e.target.value)}
+                  className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 cursor-pointer"
+                >
+                  <option value="all">-- All Categories --</option>
+                  {EXPENSE_CATEGORIES.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                  {COMMON_CATEGORIES.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Search button */}
+              <div className="lg:col-span-1">
+                <button 
+                  type="submit" 
+                  className="bg-[#3958b2] hover:bg-[#2d468f] text-white font-bold p-2.5 rounded-lg flex items-center justify-center transition-all shadow-sm text-sm w-full"
+                >
+                  <Search className="h-4.5 w-4.5" />
+                </button>
+              </div>
+
+            </form>
+          </section>
+        )}
+
         {/* ── TAB CONTENT: DASHBOARD ─────────────────────────────────────── */}
         {/* Rendered in previous section code */}
 
@@ -2619,62 +2888,54 @@ export default function SalesReportDashboard() {
         {/* Rendered in previous section code */}
 
         {/* ── TAB CONTENT: PAYMENTS LOG (Option 14) ────────────────────────── */}
-        {activeTab === "payments-list" && (
+        {/* Rendered in previous section code */}
+
+        {/* ── TAB CONTENT: COLLECTED PAYMENTS (Option 15) ──────────────────── */}
+        {/* Rendered in previous section code */}
+
+        {/* ── TAB CONTENT: EXPENSES LOG (Option 16) ────────────────────────── */}
+        {activeTab === "expenses-list" && (
           <div className="bg-white border border-[#cfdbe6] rounded-xl shadow-sm overflow-hidden flex-1 flex flex-col min-h-0">
             <div className="flex-1 overflow-x-auto min-h-0">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-[#cfdbe6] bg-slate-50 font-black text-slate-600">
                     <th className="px-6 py-4 w-20">Sl. No.</th>
-                    <th className="px-6 py-4">Paid By User</th>
-                    <th className="px-6 py-4">Camp</th>
-                    <th className="px-6 py-4">Paid For Month</th>
+                    <th className="px-6 py-4">Company</th>
+                    <th className="px-6 py-4">Expense Date</th>
+                    <th className="px-6 py-4">Category</th>
+                    <th className="px-6 py-4">Supplier</th>
+                    <th className="px-6 py-4">Description</th>
                     <th className="px-6 py-4 text-right">Amount</th>
-                    <th className="px-6 py-4">Collected By</th>
-                    <th className="px-6 py-4">Split By</th>
-                    <th className="px-6 py-4">Payment Date</th>
-                    <th className="px-6 py-4">Payment Time</th>
+                    <th className="px-6 py-4">Expense By</th>
                     <th className="px-6 py-4 text-right w-32">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                  {loadingPayments ? (
+                  {loadingExpenses ? (
                     <tr>
-                      <td colSpan={10} className="px-6 py-12 text-center">
+                      <td colSpan={9} className="px-6 py-12 text-center">
                         <RefreshCw className="h-5 w-5 animate-spin text-slate-400 mx-auto" />
                       </td>
                     </tr>
-                  ) : paymentsList.length > 0 ? (
-                    paymentsList.map((p, index) => (
-                      <tr key={p.id} className="hover:bg-slate-50/50 transition-all">
+                  ) : expensesList.length > 0 ? (
+                    expensesList.map((exp, index) => (
+                      <tr key={exp.id} className="hover:bg-slate-50/50 transition-all">
                         <td className="px-6 py-3 font-bold text-slate-400">{index + 1}</td>
-                        <td className="px-6 py-3 font-bold text-slate-800">{p.paid_by_user}</td>
-                        <td className="px-6 py-3 text-[#3958b2]">{p.camp_name}</td>
-                        <td className="px-6 py-3 font-mono">{p.paid_for_year_month}</td>
-                        <td className="px-6 py-3 text-right font-black text-[#26b048]">AED {p.amount.toFixed(2)}</td>
-                        <td className="px-6 py-3">{p.collected_by || "—"}</td>
-                        <td className="px-6 py-3 font-mono">{p.split_by || "—"}</td>
-                        <td className="px-6 py-3">{p.payment_date}</td>
-                        <td className="px-6 py-3">{p.payment_time}</td>
-                        <td className="px-6 py-3 text-right flex gap-2 justify-end items-center">
+                        <td className="px-6 py-3 font-bold text-slate-800">{exp.company_name || <span className="text-slate-400 italic">Common / Category</span>}</td>
+                        <td className="px-6 py-3">{exp.expense_date}</td>
+                        <td className="px-6 py-3">
+                          <span className="bg-sky-50 text-[#3958b2] px-2 py-0.5 rounded font-black text-[10px]">
+                            {exp.expense_category} {exp.common_category ? `(${exp.common_category})` : ""}
+                          </span>
+                        </td>
+                        <td className="px-6 py-3 text-slate-600">{exp.supplier_name || "—"}</td>
+                        <td className="px-6 py-3 text-slate-500 italic max-w-xs truncate">{exp.description || "—"}</td>
+                        <td className="px-6 py-3 text-right font-black text-red-500">AED {exp.amount.toFixed(2)}</td>
+                        <td className="px-6 py-3 text-[#ffbc36] font-bold">{exp.expense_by}</td>
+                        <td className="px-6 py-3 text-right flex gap-3 justify-end items-center">
                           <button 
-                            onClick={() => handleTogglePaymentVerify(p.id, p.verified_status)}
-                            className={`px-2.5 py-1 rounded text-[10px] font-black tracking-wide shadow-sm transition-all ${
-                              p.verified_status === 1
-                                ? "bg-[#26b048] text-white hover:bg-[#1d8b37]"
-                                : "bg-[#ffbc36] text-white hover:bg-[#dca12a]"
-                            }`}
-                          >
-                            {p.verified_status === 1 ? "Verified" : "Verify"}
-                          </button>
-                          <button 
-                            onClick={() => { setEditPayment(p); setIsPaymentModalOpen(true); }}
-                            className="text-[#3958b2] hover:text-[#2d468f] p-1.5 rounded hover:bg-[#3958b2]/10 transition-colors"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </button>
-                          <button 
-                            onClick={() => handleDeletePayment(p.id)}
+                            onClick={() => handleDeleteExpense(exp.id)}
                             className="text-red-500 hover:text-red-700 p-1.5 rounded hover:bg-red-50 transition-colors"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -2684,24 +2945,24 @@ export default function SalesReportDashboard() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={10} className="px-6 py-10 text-center text-slate-400 italic">
-                        No payments match criteria filters.
+                      <td colSpan={9} className="px-6 py-10 text-center text-slate-400 italic">
+                        No expenses match filter criteria.
                       </td>
                     </tr>
                   )}
                 </tbody>
                 
-                {!loadingPayments && paymentsList.length > 0 && (
+                {!loadingExpenses && expensesList.length > 0 && (
                   <tfoot className="bg-slate-50 border-t border-[#cfdbe6] font-bold text-xs text-slate-800">
                     <tr className="border-b border-[#cfdbe6]">
-                      <td colSpan={4} className="px-6 py-2.5 text-right font-extrabold">Total</td>
-                      <td className="px-6 py-2.5 text-right font-black text-sky-600">AED {paymentsTotals.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                      <td colSpan={5}></td>
+                      <td colSpan={6} className="px-6 py-2.5 text-right font-extrabold">Total</td>
+                      <td className="px-6 py-2.5 text-right font-black text-red-600">AED {expensesTotals.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                      <td colSpan={2}></td>
                     </tr>
                     <tr>
-                      <td colSpan={4} className="px-6 py-2.5 text-right font-extrabold">Grand Total</td>
-                      <td className="px-6 py-2.5 text-right font-black text-sky-600">AED {paymentsTotals.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                      <td colSpan={5}></td>
+                      <td colSpan={6} className="px-6 py-2.5 text-right font-extrabold">Grand Total</td>
+                      <td className="px-6 py-2.5 text-right font-black text-red-600">AED {expensesTotals.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                      <td colSpan={2}></td>
                     </tr>
                   </tfoot>
                 )}
@@ -2710,79 +2971,229 @@ export default function SalesReportDashboard() {
           </div>
         )}
 
-        {/* ── TAB CONTENT: COLLECTED PAYMENTS (Option 15) ──────────────────── */}
-        {activeTab === "collected-payments" && (
-          <div className="bg-white border border-[#cfdbe6] rounded-xl shadow-sm overflow-hidden flex-1 flex flex-col min-h-0">
-            <div className="flex-1 overflow-x-auto min-h-0">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="border-b border-[#cfdbe6] bg-slate-50 font-black text-slate-600">
-                    <th className="px-6 py-4 w-20">Sl. No.</th>
-                    <th className="px-6 py-4">Date</th>
-                    <th className="px-6 py-4">Paid By</th>
-                    <th className="px-6 py-4 text-right">Amount</th>
-                    <th className="px-6 py-4">Collected By</th>
-                    <th className="px-6 py-4">Split By</th>
-                    <th className="px-6 py-4 text-center">Verified Status</th>
-                    <th className="px-6 py-4 text-right w-32">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
-                  {loadingCollected ? (
-                    <tr>
-                      <td colSpan={8} className="px-6 py-12 text-center">
-                        <RefreshCw className="h-5 w-5 animate-spin text-slate-400 mx-auto" />
-                      </td>
-                    </tr>
-                  ) : collectedList.length > 0 ? (
-                    collectedList.map((p, index) => (
-                      <tr key={p.id} className="hover:bg-slate-50/50 transition-all">
-                        <td className="px-6 py-3 font-bold text-slate-400">{index + 1}</td>
-                        <td className="px-6 py-3">{p.payment_date} {p.payment_time}</td>
-                        <td className="px-6 py-3 font-bold text-slate-800">{p.paid_by_user}</td>
-                        <td className="px-6 py-3 text-right font-black text-[#26b048]">AED {p.amount.toFixed(2)}</td>
-                        <td className="px-6 py-3">{p.collected_by || "—"}</td>
-                        <td className="px-6 py-3 font-mono">{p.split_by || "—"}</td>
-                        <td className="px-6 py-3 text-center">
-                          <span className="bg-[#26b048]/10 text-[#26b048] px-3 py-1 rounded-full text-[10px] font-black">
-                            Verified
-                          </span>
-                        </td>
-                        <td className="px-6 py-3 text-right">
-                          <button 
-                            onClick={() => handleTogglePaymentVerify(p.id, 1)}
-                            className="text-[#3958b2] hover:text-[#2d468f] text-[10px] font-black underline"
-                          >
-                            Mark Pending
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={8} className="px-6 py-10 text-center text-slate-400 italic">
-                        No collected payments records found.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-                
-                {!loadingCollected && collectedList.length > 0 && (
-                  <tfoot className="bg-slate-50 border-t border-[#cfdbe6] font-bold text-xs text-slate-800">
-                    <tr className="border-b border-[#cfdbe6]">
-                      <td colSpan={3} className="px-6 py-2.5 text-right font-extrabold">Total</td>
-                      <td className="px-6 py-2.5 text-right font-black text-sky-600">AED {collectedTotals.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                      <td colSpan={4}></td>
-                    </tr>
-                    <tr>
-                      <td colSpan={3} className="px-6 py-2.5 text-right font-extrabold">Grand Total</td>
-                      <td className="px-6 py-2.5 text-right font-black text-sky-600">AED {collectedTotals.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                      <td colSpan={4}></td>
-                    </tr>
-                  </tfoot>
-                )}
-              </table>
-            </div>
+        {/* ── TAB CONTENT: NEW REGULAR EXPENSE (Option 17) ────────────────── */}
+        {activeTab === "expenses-new" && (
+          <div className="bg-white border border-[#cfdbe6] rounded-xl shadow-sm max-w-xl mx-auto p-6 mt-4 w-full">
+            <h4 className="font-black text-[#3958b2] text-sm uppercase tracking-wide border-b border-slate-100 pb-3 mb-6">
+              Create Regular Expense
+            </h4>
+            <form onSubmit={handleSaveRegularExpense} className="space-y-4 text-xs font-bold text-slate-600">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Expense Category</label>
+                  <select 
+                    value={regExpense.expense_category}
+                    onChange={(e) => setRegExpense(prev => ({ ...prev, expense_category: e.target.value }))}
+                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2.5 rounded-lg text-sm outline-none text-slate-800"
+                  >
+                    {EXPENSE_CATEGORIES.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Company</label>
+                  <select 
+                    value={regExpense.company_name}
+                    onChange={(e) => setRegExpense(prev => ({ ...prev, company_name: e.target.value }))}
+                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2.5 rounded-lg text-sm outline-none text-slate-800"
+                  >
+                    {COMPANIES.map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Supplier</label>
+                  <select 
+                    value={regExpense.supplier_name}
+                    onChange={(e) => setRegExpense(prev => ({ ...prev, supplier_name: e.target.value }))}
+                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2.5 rounded-lg text-sm outline-none text-slate-800"
+                  >
+                    {SUPPLIERS.map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Expense Date</label>
+                  <input 
+                    type="date" 
+                    value={regExpense.expense_date}
+                    onChange={(e) => setRegExpense(prev => ({ ...prev, expense_date: e.target.value }))}
+                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2.5 rounded-lg text-sm outline-none text-slate-800"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Expense By Staff</label>
+                  <select 
+                    value={regExpense.expense_by}
+                    onChange={(e) => setRegExpense(prev => ({ ...prev, expense_by: e.target.value }))}
+                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2.5 rounded-lg text-sm outline-none text-slate-800"
+                  >
+                    {STAFF_LIST.map(st => (
+                      <option key={st} value={st}>{st}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Amount (AED)</label>
+                  <input 
+                    type="number" 
+                    step="0.01"
+                    value={regExpense.amount || ""}
+                    onChange={(e) => setRegExpense(prev => ({ ...prev, amount: Number(e.target.value) }))}
+                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2.5 rounded-lg text-sm outline-none text-slate-800"
+                    placeholder="e.g. 50"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Description</label>
+                <textarea 
+                  value={regExpense.description}
+                  onChange={(e) => setRegExpense(prev => ({ ...prev, description: e.target.value }))}
+                  className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm outline-none text-slate-800 min-h-[90px]"
+                  placeholder="Expense items and details..."
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                <button 
+                  type="button"
+                  onClick={() => setActiveTab("expenses-list")}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 rounded-lg transition-all"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit"
+                  className="px-6 py-2 bg-[#3958b2] hover:bg-[#2d468f] text-white rounded-lg transition-all shadow-md"
+                >
+                  Save Regular Expense
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* ── TAB CONTENT: NEW COMMON EXPENSE (Option 18) ─────────────────── */}
+        {activeTab === "expenses-common-new" && (
+          <div className="bg-white border border-[#cfdbe6] rounded-xl shadow-sm max-w-xl mx-auto p-6 mt-4 w-full">
+            <h4 className="font-black text-[#3958b2] text-sm uppercase tracking-wide border-b border-slate-100 pb-3 mb-6">
+              Create Common Expense
+            </h4>
+            <form onSubmit={handleSaveCommonExpense} className="space-y-4 text-xs font-bold text-slate-600">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Expense Category</label>
+                  <select 
+                    value={commExpense.expense_category}
+                    onChange={(e) => setCommExpense(prev => ({ ...prev, expense_category: e.target.value }))}
+                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2.5 rounded-lg text-sm outline-none text-slate-800"
+                  >
+                    {EXPENSE_CATEGORIES.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Common Category</label>
+                  <select 
+                    value={commExpense.common_category}
+                    onChange={(e) => setCommExpense(prev => ({ ...prev, common_category: e.target.value }))}
+                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2.5 rounded-lg text-sm outline-none text-slate-800"
+                  >
+                    {COMMON_CATEGORIES.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Supplier</label>
+                  <select 
+                    value={commExpense.supplier_name}
+                    onChange={(e) => setCommExpense(prev => ({ ...prev, supplier_name: e.target.value }))}
+                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2.5 rounded-lg text-sm outline-none text-slate-800"
+                  >
+                    {SUPPLIERS.map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Expense Date</label>
+                  <input 
+                    type="date" 
+                    value={commExpense.expense_date}
+                    onChange={(e) => setCommExpense(prev => ({ ...prev, expense_date: e.target.value }))}
+                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2.5 rounded-lg text-sm outline-none text-slate-800"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Expense By Staff</label>
+                  <select 
+                    value={commExpense.expense_by}
+                    onChange={(e) => setCommExpense(prev => ({ ...prev, expense_by: e.target.value }))}
+                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2.5 rounded-lg text-sm outline-none text-slate-800"
+                  >
+                    {STAFF_LIST.map(st => (
+                      <option key={st} value={st}>{st}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Amount (AED)</label>
+                  <input 
+                    type="number" 
+                    step="0.01"
+                    value={commExpense.amount || ""}
+                    onChange={(e) => setCommExpense(prev => ({ ...prev, amount: Number(e.target.value) }))}
+                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2.5 rounded-lg text-sm outline-none text-slate-800"
+                    placeholder="e.g. 100"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Description</label>
+                <textarea 
+                  value={commExpense.description}
+                  onChange={(e) => setCommExpense(prev => ({ ...prev, description: e.target.value }))}
+                  className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm outline-none text-slate-800 min-h-[90px]"
+                  placeholder="Common expense items and details..."
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                <button 
+                  type="button"
+                  onClick={() => setActiveTab("expenses-list")}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-250 border border-slate-300 text-slate-700 rounded-lg transition-all"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit"
+                  className="px-6 py-2 bg-[#3958b2] hover:bg-[#2d468f] text-white rounded-lg transition-all shadow-md"
+                >
+                  Save Common Expense
+                </button>
+              </div>
+            </form>
           </div>
         )}
 
@@ -2810,118 +3221,10 @@ export default function SalesReportDashboard() {
       {/* Rendered in previous section code */}
 
       {/* ── POPUP MODAL: PAYMENTS LOG EDIT/NEW ───────────────────────────── */}
-      {isPaymentModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] animate-in fade-in duration-200">
-          <div className="bg-white border border-[#cfdbe6] rounded-xl shadow-2xl p-6 w-[450px] flex flex-col">
-            <div className="flex justify-between items-center pb-3 border-b border-slate-100 mb-4">
-              <h4 className="font-black text-slate-800 text-sm uppercase tracking-wide">
-                {editPayment?.id ? "Edit Payment Log" : "New Payment Log"}
-              </h4>
-              <button 
-                onClick={() => { setIsPaymentModalOpen(false); setEditPayment(null); }}
-                className="text-slate-400 hover:text-slate-600 transition-colors"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            
-            <div className="space-y-4 mb-6 text-xs font-bold text-slate-600">
-              <div>
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Paid By User</label>
-                <input 
-                  type="text" 
-                  value={editPayment?.paid_by_user || ""}
-                  onChange={(e) => setEditPayment(prev => prev ? { ...prev, paid_by_user: e.target.value } : null)}
-                  className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-bold outline-none text-slate-800"
-                  placeholder="e.g. iqbaal"
-                />
-              </div>
+      {/* Rendered in previous section code */}
 
-              <div>
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Camp</label>
-                <select 
-                  value={editPayment?.camp_name || ""}
-                  onChange={(e) => setEditPayment(prev => prev ? { ...prev, camp_name: e.target.value } : null)}
-                  className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-bold outline-none text-slate-800 cursor-pointer"
-                >
-                  {campList.map(c => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                  {campList.length === 0 && (
-                    <option value="APM-DXB-camp-1">APM-DXB-camp-1</option>
-                  )}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Paid For Year | Month</label>
-                <input 
-                  type="month" 
-                  value={editPayment?.paid_for_year_month || ""}
-                  onChange={(e) => setEditPayment(prev => prev ? { ...prev, paid_for_year_month: e.target.value } : null)}
-                  className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-bold outline-none text-slate-800"
-                />
-              </div>
-
-              <div>
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Amount (AED)</label>
-                <input 
-                  type="number" 
-                  value={editPayment?.amount || 0}
-                  onChange={(e) => setEditPayment(prev => prev ? { ...prev, amount: Number(e.target.value) } : null)}
-                  className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-bold outline-none text-slate-800"
-                  placeholder="e.g. 500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Collected By</label>
-                  <input 
-                    type="text" 
-                    value={editPayment?.collected_by || ""}
-                    onChange={(e) => setEditPayment(prev => prev ? { ...prev, collected_by: e.target.value } : null)}
-                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">Split By</label>
-                  <input 
-                    type="text" 
-                    value={editPayment?.split_by || ""}
-                    onChange={(e) => setEditPayment(prev => prev ? { ...prev, split_by: e.target.value } : null)}
-                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="flex gap-3 justify-end text-xs font-bold">
-              <button 
-                onClick={() => { setIsPaymentModalOpen(false); setEditPayment(null); }}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-250 border border-slate-300 text-slate-700 rounded-lg transition-all"
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={handleSavePayment}
-                className="px-5 py-2 bg-[#3958b2] hover:bg-[#2d468f] text-white rounded-lg transition-all shadow-md"
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── FOOTER (Powered by Azinova Technologies) ────────────────────── */}
+      {/* ── FOOTER (Clean copyright) ────────────────────── */}
       <footer className="w-full bg-[#bfebff] border-t border-[#aedbff] py-3.5 px-6 flex justify-between items-center text-xs font-bold text-[#4a6b82]">
-        <div>
-          <span>Powered by: </span>
-          <a href="http://azinovatechnologies.com/" target="_blank" rel="noreferrer" className="text-[#3958b2] hover:underline">
-            Azinova Technologies
-          </a>
-        </div>
         <div>
           <span>© 2026 Smartwifi Portal</span>
         </div>
