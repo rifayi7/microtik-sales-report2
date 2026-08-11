@@ -1586,10 +1586,8 @@ export default function SalesReportDashboard() {
       <div className="min-h-screen bg-[#d5e5f4] flex items-center justify-center font-sans p-6">
         <div className="bg-white border border-[#cfdbe6] rounded-xl shadow-2xl p-8 w-[400px] flex flex-col text-slate-800">
           <div className="flex items-center gap-2 justify-center mb-6">
-            <div className="bg-[#ffbc36] text-white h-9 w-9 rounded-lg flex items-center justify-center font-black text-xl shadow-md">
-              S
-            </div>
-            <span className="font-extrabold text-[#3958b2] text-xl tracking-wider">SMARTWIFI</span>
+            <div className="bg-[#ffbc36] text-white h-9 w-9 rounded-lg flex items-center justify-center font-black text-xl shadow-md">W</div>
+            <span className="font-extrabold text-[#3958b2] text-xl tracking-wider">WIFILINK</span>
           </div>
 
           <h4 className="font-black text-slate-700 text-center text-sm uppercase tracking-wide mb-6">
@@ -1645,10 +1643,8 @@ export default function SalesReportDashboard() {
       <header className="fixed top-0 left-0 w-full h-[70px] bg-white border-b border-[#cfdbe6] flex items-center justify-between px-6 z-50">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
-            <div className="bg-[#ffbc36] text-white h-9 w-9 rounded-lg flex items-center justify-center font-black text-xl shadow-md">
-              S
-            </div>
-            <span className="font-extrabold text-[#3958b2] text-xl tracking-wider">SMARTWIFI</span>
+            <div className="bg-[#ffbc36] text-white h-9 w-9 rounded-lg flex items-center justify-center font-black text-xl shadow-md">W</div>
+            <span className="font-extrabold text-[#3958b2] text-xl tracking-wider">WIFILINK</span>
           </div>
         </div>
         
@@ -3441,7 +3437,7 @@ export default function SalesReportDashboard() {
       {/* ── FOOTER (Clean copyright) ────────────────────── */}
       <footer className="w-full bg-[#bfebff] border-t border-[#aedbff] py-3.5 px-6 flex justify-between items-center text-xs font-bold text-[#4a6b82]">
         <div>
-          <span>© 2026 Smartwifi Portal</span>
+          <span>© 2026 WifiLink Portal</span>
         </div>
       </footer>
 
