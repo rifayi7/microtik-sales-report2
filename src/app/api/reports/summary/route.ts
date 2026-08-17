@@ -14,9 +14,8 @@ export async function GET(request: Request) {
     const summarySql = `
       SELECT 
         COUNT(*) as totalSales, 
-        SUM(COALESCE(p.price, 0)) as totalRevenue 
+        SUM(COALESCE(v.price_charged, 0)) as totalRevenue 
       FROM vouchers v
-      LEFT JOIN sales_pricing p ON v.validity_days = p.validity_days
       ${whereClause}
     `;
     const summaryRow = (await db.execute({ sql: summarySql, args: [...params] })).rows[0] as unknown as {
@@ -32,9 +31,8 @@ export async function GET(request: Request) {
       SELECT 
         v.sold_by as name, 
         COUNT(*) as salesCount, 
-        SUM(COALESCE(p.price, 0)) as revenue 
+        SUM(COALESCE(v.price_charged, 0)) as revenue 
       FROM vouchers v
-      LEFT JOIN sales_pricing p ON v.validity_days = p.validity_days
       ${whereClause} AND v.sold_by IS NOT NULL AND v.sold_by != ''
       GROUP BY v.sold_by
       ORDER BY revenue DESC
@@ -50,9 +48,8 @@ export async function GET(request: Request) {
       SELECT 
         v.validity_days || ' Days' as planName, 
         COUNT(*) as count, 
-        SUM(COALESCE(p.price, 0)) as revenue 
+        SUM(COALESCE(v.price_charged, 0)) as revenue 
       FROM vouchers v
-      LEFT JOIN sales_pricing p ON v.validity_days = p.validity_days
       ${whereClause}
       GROUP BY v.validity_days
       ORDER BY count DESC
@@ -68,9 +65,8 @@ export async function GET(request: Request) {
       SELECT 
         strftime('%Y-%m-%d', v.used_at) as date, 
         COUNT(*) as sales, 
-        SUM(COALESCE(p.price, 0)) as revenue 
+        SUM(COALESCE(v.price_charged, 0)) as revenue 
       FROM vouchers v
-      LEFT JOIN sales_pricing p ON v.validity_days = p.validity_days
       ${whereClause}
       GROUP BY date
       ORDER BY date ASC
@@ -90,10 +86,9 @@ export async function GET(request: Request) {
     const yesterday = yesterdayDate.toISOString().split("T")[0];
 
     const todayStatsSql = `
-      SELECT COUNT(*) as count, SUM(COALESCE(p.price, 0)) as revenue
+      SELECT COUNT(*) as count, SUM(COALESCE(v.price_charged, 0)) as revenue
       FROM vouchers v
-      LEFT JOIN sales_pricing p ON v.validity_days = p.validity_days
-      WHERE v.is_used = 1 AND v.used_at >= ? AND v.used_at <= ?
+      WHERE v.status = 'redeemed' AND v.used_at >= ? AND v.used_at <= ?
     `;
     const todayStats = (await db.execute({ sql: todayStatsSql, args: [`${today} 00:00:00`, `${today} 23:59:59`] })).rows[0] as unknown as {
       count: number;

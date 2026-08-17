@@ -39,8 +39,8 @@ export async function GET(request: Request) {
         v.validity_days as validity,
         v.router_id as hotspot,
         COUNT(*) as generated,
-        SUM(CASE WHEN v.is_used = 1 ${soldDateCondition} THEN 1 ELSE 0 END) as sold,
-        SUM(CASE WHEN v.is_used = 0 THEN 1 ELSE 0 END) as remaining
+        SUM(CASE WHEN v.status = 'redeemed' ${soldDateCondition} THEN 1 ELSE 0 END) as sold,
+        SUM(CASE WHEN v.status = 'available' THEN 1 ELSE 0 END) as remaining
       FROM vouchers v
       WHERE ${whereClause}
       GROUP BY v.validity_days, v.router_id

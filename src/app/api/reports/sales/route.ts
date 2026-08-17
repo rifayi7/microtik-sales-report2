@@ -29,7 +29,6 @@ export async function GET(request: Request) {
     const countSql = `
       SELECT COUNT(*) as count 
       FROM vouchers v
-      LEFT JOIN sales_pricing p ON v.validity_days = p.validity_days
       ${whereClause}
     `;
     const countRow = (await db.execute({ sql: countSql, args: [...params] })).rows[0] as unknown as { count: number } | undefined;
@@ -44,9 +43,8 @@ export async function GET(request: Request) {
         v.used_at as timestamp, 
         v.sold_by as seller, 
         v.router_id as routerId,
-        COALESCE(p.price, 0) as price
+        COALESCE(v.price_charged, 0) as price
       FROM vouchers v
-      LEFT JOIN sales_pricing p ON v.validity_days = p.validity_days
       ${whereClause}
       ORDER BY v.used_at DESC
       LIMIT ? OFFSET ?
@@ -57,7 +55,7 @@ export async function GET(request: Request) {
     const agentsSql = `
       SELECT DISTINCT sold_by as name 
       FROM vouchers 
-      WHERE is_used = 1 AND sold_by IS NOT NULL AND sold_by != ''
+      WHERE status = 'redeemed' AND sold_by IS NOT NULL AND sold_by != ''
       ORDER BY sold_by ASC
     `;
     const agentsRows = (await db.execute({ sql: agentsSql, args: [] })).rows as unknown as { name: string }[];
@@ -67,7 +65,7 @@ export async function GET(request: Request) {
     const routersSql = `
       SELECT DISTINCT router_id as id 
       FROM vouchers 
-      WHERE is_used = 1 AND router_id IS NOT NULL AND router_id != ''
+      WHERE status = 'redeemed' AND router_id IS NOT NULL AND router_id != ''
       ORDER BY router_id ASC
     `;
     const routersRows = (await db.execute({ sql: routersSql, args: [] })).rows as unknown as { id: string }[];
@@ -77,7 +75,7 @@ export async function GET(request: Request) {
     const plansSql = `
       SELECT DISTINCT validity_days as days 
       FROM vouchers 
-      WHERE is_used = 1
+      WHERE status = 'redeemed'
       ORDER BY validity_days ASC
     `;
     const plansRows = (await db.execute({ sql: plansSql, args: [] })).rows as unknown as { days: number }[];

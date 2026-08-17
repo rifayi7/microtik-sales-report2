@@ -11,7 +11,7 @@ export async function GET(request: Request) {
     const user = url.searchParams.get("user");
     const camp = url.searchParams.get("camp");
 
-    let conditions = ["v.is_used = 1", "v.sold_by IS NOT NULL", "v.sold_by != ''"];
+    let conditions = ["v.status = 'redeemed'", "v.sold_by IS NOT NULL", "v.sold_by != ''"];
     let params: any[] = [];
 
     if (user && user !== "all" && user !== "") {
@@ -35,9 +35,8 @@ export async function GET(request: Request) {
         v.sold_by as userName,
         v.router_id as campName,
         COUNT(*) as salesCount,
-        SUM(COALESCE(p.price, 0)) as salesAmount
+        SUM(COALESCE(v.price_charged, 0)) as salesAmount
       FROM vouchers v
-      LEFT JOIN sales_pricing p ON v.validity_days = p.validity_days
       WHERE ${whereClause}
       GROUP BY v.sold_by, v.router_id
       ORDER BY salesAmount DESC

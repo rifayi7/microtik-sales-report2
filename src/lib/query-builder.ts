@@ -12,7 +12,7 @@ export function buildWhereClause(searchParams: URLSearchParams): {
   params: any[];
 } {
   const params: any[] = [];
-  const conditions: string[] = ["v.is_used = 1"]; // We only report on sold/used vouchers
+  const conditions: string[] = ["v.status = 'redeemed'"]; // We only report on sold/used vouchers
 
   const startDate = searchParams.get("startDate");
   const endDate = searchParams.get("endDate");
