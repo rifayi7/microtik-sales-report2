@@ -5,7 +5,7 @@ export const runtime = "nodejs";
 
 export async function GET(request: Request) {
   try {
-    const db = getDB();
+    const db = await getDB();
     const url = new URL(request.url);
     const search = url.searchParams.get("search");
     const camp = url.searchParams.get("camp");
@@ -54,7 +54,7 @@ export async function GET(request: Request) {
 
     query += " ORDER BY payment_date DESC, payment_time DESC";
 
-    const rows = db.prepare(query).all(...params) as any[];
+    const rows = (await db.execute({ sql: query, args: [...params] })).rows as any[];
     return NextResponse.json({ success: true, data: rows });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to load payments" }, { status: 500 });
@@ -63,16 +63,16 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const db = getDB();
+    const db = await getDB();
     const { id, paid_by_user, camp_name, paid_for_year_month, amount, collected_by, split_by, payment_date, payment_time, verified_status, action } = await request.json();
 
     if (action === "delete") {
-      db.prepare("DELETE FROM payments WHERE id = ?").run(id);
+      await db.execute({ sql: "DELETE FROM payments WHERE id = ?", args: [id] });
       return NextResponse.json({ success: true });
     }
 
     if (action === "verify") {
-      db.prepare("UPDATE payments SET verified_status = ? WHERE id = ?").run(verified_status, id);
+      await db.execute({ sql: "UPDATE payments SET verified_status = ? WHERE id = ?", args: [verified_status, id] });
       return NextResponse.json({ success: true });
     }
 
@@ -81,19 +81,19 @@ export async function POST(request: Request) {
     }
 
     if (id) {
-      db.prepare(`
+      await db.execute({ sql: `
         UPDATE payments 
         SET paid_by_user = ?, camp_name = ?, paid_for_year_month = ?, amount = ?, collected_by = ?, split_by = ?, payment_date = ?, payment_time = ?
         WHERE id = ?
-      `).run(paid_by_user, camp_name, paid_for_year_month, amount, collected_by || null, split_by || null, payment_date || null, payment_time || null, id);
+      `, args: [paid_by_user, camp_name, paid_for_year_month, amount, collected_by || null, split_by || null, payment_date || null, payment_time || null, id] });
     } else {
       const now = new Date();
       const pDate = payment_date || now.toISOString().split("T")[0];
       const pTime = payment_time || now.toTimeString().split(" ")[0];
-      db.prepare(`
+      await db.execute({ sql: `
         INSERT INTO payments (paid_by_user, camp_name, paid_for_year_month, amount, collected_by, split_by, payment_date, payment_time, verified_status) 
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
-      `).run(paid_by_user, camp_name, paid_for_year_month, amount, collected_by || null, split_by || null, pDate, pTime);
+      `, args: [paid_by_user, camp_name, paid_for_year_month, amount, collected_by || null, split_by || null, pDate, pTime] });
     }
 
     return NextResponse.json({ success: true });

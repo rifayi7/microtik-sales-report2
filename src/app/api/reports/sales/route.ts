@@ -16,7 +16,7 @@ interface SalesRecord {
 
 export async function GET(request: Request) {
   try {
-    const db = getDB();
+    const db = await getDB();
     const url = new URL(request.url);
     const { whereClause, params } = buildWhereClause(url.searchParams);
 
@@ -32,7 +32,7 @@ export async function GET(request: Request) {
       LEFT JOIN sales_pricing p ON v.validity_days = p.validity_days
       ${whereClause}
     `;
-    const countRow = db.prepare(countSql).get(...params) as { count: number } | undefined;
+    const countRow = (await db.execute({ sql: countSql, args: [...params] })).rows[0] as unknown as { count: number } | undefined;
     const totalCount = countRow ? countRow.count : 0;
 
     // 2. Fetch the filtered sales logs
@@ -51,7 +51,7 @@ export async function GET(request: Request) {
       ORDER BY v.used_at DESC
       LIMIT ? OFFSET ?
     `;
-    const sales = db.prepare(salesSql).all(...params, limit, offset) as unknown as SalesRecord[];
+    const sales = (await db.execute({ sql: salesSql, args: [...params, limit, offset] })).rows as unknown as SalesRecord[];
 
     // 3. Get distinct list of agents for dropdown filter
     const agentsSql = `
@@ -60,7 +60,7 @@ export async function GET(request: Request) {
       WHERE is_used = 1 AND sold_by IS NOT NULL AND sold_by != ''
       ORDER BY sold_by ASC
     `;
-    const agentsRows = db.prepare(agentsSql).all() as unknown as { name: string }[];
+    const agentsRows = (await db.execute({ sql: agentsSql, args: [] })).rows as unknown as { name: string }[];
     const agents = agentsRows.map(row => row.name);
 
     // 4. Get distinct list of routers for dropdown filter
@@ -70,7 +70,7 @@ export async function GET(request: Request) {
       WHERE is_used = 1 AND router_id IS NOT NULL AND router_id != ''
       ORDER BY router_id ASC
     `;
-    const routersRows = db.prepare(routersSql).all() as unknown as { id: string }[];
+    const routersRows = (await db.execute({ sql: routersSql, args: [] })).rows as unknown as { id: string }[];
     const routers = routersRows.map(row => row.id);
 
     // 5. Get distinct validity periods
@@ -80,7 +80,7 @@ export async function GET(request: Request) {
       WHERE is_used = 1
       ORDER BY validity_days ASC
     `;
-    const plansRows = db.prepare(plansSql).all() as unknown as { days: number }[];
+    const plansRows = (await db.execute({ sql: plansSql, args: [] })).rows as unknown as { days: number }[];
     const plans = plansRows.map(row => row.days);
 
     return NextResponse.json({

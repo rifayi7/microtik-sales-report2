@@ -5,7 +5,7 @@ export const runtime = "nodejs";
 
 export async function GET(request: Request) {
   try {
-    const db = getDB();
+    const db = await getDB();
     const url = new URL(request.url);
     const search = url.searchParams.get("search");
     const user = url.searchParams.get("user");
@@ -43,7 +43,7 @@ export async function GET(request: Request) {
       ORDER BY salesAmount DESC
     `;
 
-    const rows = db.prepare(sql).all(...params) as unknown as {
+    const rows = (await db.execute({ sql: sql, args: [...params] })).rows as unknown as {
       userName: string;
       campName: string;
       salesCount: number;

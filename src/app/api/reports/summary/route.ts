@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 
 export async function GET(request: Request) {
   try {
-    const db = getDB();
+    const db = await getDB();
     const url = new URL(request.url);
     const { whereClause, params } = buildWhereClause(url.searchParams);
 
@@ -19,7 +19,7 @@ export async function GET(request: Request) {
       LEFT JOIN sales_pricing p ON v.validity_days = p.validity_days
       ${whereClause}
     `;
-    const summaryRow = db.prepare(summarySql).get(...params) as unknown as {
+    const summaryRow = (await db.execute({ sql: summarySql, args: [...params] })).rows[0] as unknown as {
       totalSales: number;
       totalRevenue: number | null;
     } | undefined;
@@ -39,7 +39,7 @@ export async function GET(request: Request) {
       GROUP BY v.sold_by
       ORDER BY revenue DESC
     `;
-    const agents = db.prepare(agentSql).all(...params) as unknown as {
+    const agents = (await db.execute({ sql: agentSql, args: [...params] })).rows as unknown as {
       name: string;
       salesCount: number;
       revenue: number;
@@ -57,7 +57,7 @@ export async function GET(request: Request) {
       GROUP BY v.validity_days
       ORDER BY count DESC
     `;
-    const plans = db.prepare(planSql).all(...params) as unknown as {
+    const plans = (await db.execute({ sql: planSql, args: [...params] })).rows as unknown as {
       planName: string;
       count: number;
       revenue: number;
@@ -75,7 +75,7 @@ export async function GET(request: Request) {
       GROUP BY date
       ORDER BY date ASC
     `;
-    const trends = db.prepare(trendSql).all(...params) as unknown as {
+    const trends = (await db.execute({ sql: trendSql, args: [...params] })).rows as unknown as {
       date: string;
       sales: number;
       revenue: number;
@@ -95,12 +95,12 @@ export async function GET(request: Request) {
       LEFT JOIN sales_pricing p ON v.validity_days = p.validity_days
       WHERE v.is_used = 1 AND v.used_at >= ? AND v.used_at <= ?
     `;
-    const todayStats = db.prepare(todayStatsSql).get(`${today} 00:00:00`, `${today} 23:59:59`) as unknown as {
+    const todayStats = (await db.execute({ sql: todayStatsSql, args: [`${today} 00:00:00`, `${today} 23:59:59`] })).rows[0] as unknown as {
       count: number;
       revenue: number | null;
     };
 
-    const yesterdayStats = db.prepare(todayStatsSql).get(`${yesterday} 00:00:00`, `${yesterday} 23:59:59`) as unknown as {
+    const yesterdayStats = (await db.execute({ sql: todayStatsSql, args: [`${yesterday} 00:00:00`, `${yesterday} 23:59:59`] })).rows[0] as unknown as {
       count: number;
       revenue: number | null;
     };

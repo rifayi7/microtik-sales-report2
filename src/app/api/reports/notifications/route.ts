@@ -5,7 +5,7 @@ export const runtime = "nodejs";
 
 export async function GET(request: Request) {
   try {
-    const db = getDB();
+    const db = await getDB();
     const url = new URL(request.url);
     const search = url.searchParams.get("search");
     const sortBy = url.searchParams.get("sortBy");
@@ -24,7 +24,7 @@ export async function GET(request: Request) {
       query += " ORDER BY id ASC";
     }
 
-    const rows = db.prepare(query).all(...params) as any[];
+    const rows = (await db.execute({ sql: query, args: [...params] })).rows as any[];
     return NextResponse.json({ success: true, data: rows });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to load notifications" }, { status: 500 });
@@ -33,16 +33,16 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const db = getDB();
+    const db = await getDB();
     const { id, camp_name, user_name, category, message, is_read, action } = await request.json();
 
     if (action === "delete") {
-      db.prepare("DELETE FROM notifications WHERE id = ?").run(id);
+      await db.execute({ sql: "DELETE FROM notifications WHERE id = ?", args: [id] });
       return NextResponse.json({ success: true });
     }
 
     if (action === "toggle") {
-      db.prepare("UPDATE notifications SET is_read = ? WHERE id = ?").run(is_read, id);
+      await db.execute({ sql: "UPDATE notifications SET is_read = ? WHERE id = ?", args: [is_read, id] });
       return NextResponse.json({ success: true });
     }
 
@@ -51,16 +51,16 @@ export async function POST(request: Request) {
     }
 
     if (id) {
-      db.prepare(`
+      await db.execute({ sql: `
         UPDATE notifications 
         SET camp_name = ?, user_name = ?, category = ?, message = ?
         WHERE id = ?
-      `).run(camp_name, user_name, category || "General", message, id);
+      `, args: [camp_name, user_name, category || "General", message, id] });
     } else {
-      db.prepare(`
+      await db.execute({ sql: `
         INSERT INTO notifications (camp_name, user_name, category, message, is_read) 
         VALUES (?, ?, ?, ?, 0)
-      `).run(camp_name, user_name, category || "General", message);
+      `, args: [camp_name, user_name, category || "General", message] });
     }
 
     return NextResponse.json({ success: true });

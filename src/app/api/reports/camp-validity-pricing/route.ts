@@ -5,7 +5,7 @@ export const runtime = "nodejs";
 
 export async function GET(request: Request) {
   try {
-    const db = getDB();
+    const db = await getDB();
     const url = new URL(request.url);
     const search = url.searchParams.get("search");
     const camp = url.searchParams.get("camp");
@@ -42,7 +42,7 @@ export async function GET(request: Request) {
       query += " ORDER BY id ASC";
     }
 
-    const rows = db.prepare(query).all(...params) as any[];
+    const rows = (await db.execute({ sql: query, args: [...params] })).rows as any[];
     return NextResponse.json({ success: true, data: rows });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to load camp validity pricing" }, { status: 500 });
@@ -51,16 +51,16 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const db = getDB();
+    const db = await getDB();
     const { id, camp_name, validity_name, company_name, price, status, action } = await request.json();
 
     if (action === "delete") {
-      db.prepare("DELETE FROM camp_validity_pricing WHERE id = ?").run(id);
+      await db.execute({ sql: "DELETE FROM camp_validity_pricing WHERE id = ?", args: [id] });
       return NextResponse.json({ success: true });
     }
 
     if (action === "toggle") {
-      db.prepare("UPDATE camp_validity_pricing SET status = ? WHERE id = ?").run(status, id);
+      await db.execute({ sql: "UPDATE camp_validity_pricing SET status = ? WHERE id = ?", args: [status, id] });
       return NextResponse.json({ success: true });
     }
 
@@ -69,16 +69,16 @@ export async function POST(request: Request) {
     }
 
     if (id) {
-      db.prepare(`
+      await db.execute({ sql: `
         UPDATE camp_validity_pricing 
         SET camp_name = ?, validity_name = ?, company_name = ?, price = ?
         WHERE id = ?
-      `).run(camp_name, validity_name, company_name || null, price || 0, id);
+      `, args: [camp_name, validity_name, company_name || null, price || 0, id] });
     } else {
-      db.prepare(`
+      await db.execute({ sql: `
         INSERT INTO camp_validity_pricing (camp_name, validity_name, company_name, price, status) 
         VALUES (?, ?, ?, ?, 1)
-      `).run(camp_name, validity_name, company_name || null, price || 0);
+      `, args: [camp_name, validity_name, company_name || null, price || 0] });
     }
 
     return NextResponse.json({ success: true });

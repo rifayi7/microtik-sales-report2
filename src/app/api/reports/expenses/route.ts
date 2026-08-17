@@ -5,7 +5,7 @@ export const runtime = "nodejs";
 
 export async function GET(request: Request) {
   try {
-    const db = getDB();
+    const db = await getDB();
     const url = new URL(request.url);
     const search = url.searchParams.get("search");
     const company = url.searchParams.get("company");
@@ -54,7 +54,7 @@ export async function GET(request: Request) {
 
     query += " ORDER BY expense_date DESC";
 
-    const rows = db.prepare(query).all(...params) as any[];
+    const rows = (await db.execute({ sql: query, args: [...params] })).rows as any[];
     return NextResponse.json({ success: true, data: rows });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to load expenses" }, { status: 500 });
@@ -63,11 +63,11 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const db = getDB();
+    const db = await getDB();
     const { id, company_name, common_category, expense_category, supplier_name, expense_date, expense_by, amount, description, action } = await request.json();
 
     if (action === "delete") {
-      db.prepare("DELETE FROM expenses WHERE id = ?").run(id);
+      await db.execute({ sql: "DELETE FROM expenses WHERE id = ?", args: [id] });
       return NextResponse.json({ success: true });
     }
 
@@ -76,16 +76,16 @@ export async function POST(request: Request) {
     }
 
     if (id) {
-      db.prepare(`
+      await db.execute({ sql: `
         UPDATE expenses 
         SET company_name = ?, common_category = ?, expense_category = ?, supplier_name = ?, expense_date = ?, expense_by = ?, amount = ?, description = ?
         WHERE id = ?
-      `).run(company_name || null, common_category || null, expense_category, supplier_name || null, expense_date, expense_by, amount, description || null, id);
+      `, args: [company_name || null, common_category || null, expense_category, supplier_name || null, expense_date, expense_by, amount, description || null, id] });
     } else {
-      db.prepare(`
+      await db.execute({ sql: `
         INSERT INTO expenses (company_name, common_category, expense_category, supplier_name, expense_date, expense_by, amount, description) 
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(company_name || null, common_category || null, expense_category, supplier_name || null, expense_date, expense_by, amount, description || null);
+      `, args: [company_name || null, common_category || null, expense_category, supplier_name || null, expense_date, expense_by, amount, description || null] });
     }
 
     return NextResponse.json({ success: true });

@@ -5,7 +5,7 @@ export const runtime = "nodejs";
 
 export async function GET() {
   try {
-    const pricing = getPricingMap();
+    const pricing = await getPricingMap();
     return NextResponse.json({ success: true, pricing });
   } catch (error) {
     return NextResponse.json(
@@ -26,8 +26,8 @@ export async function POST(request: Request) {
       );
     }
 
-    updatePrice(validity_days, price);
-    const updatedPricing = getPricingMap();
+    await updatePrice(validity_days, price);
+    const updatedPricing = await getPricingMap();
     
     return NextResponse.json({ success: true, pricing: updatedPricing });
   } catch (error) {

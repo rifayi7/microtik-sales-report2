@@ -5,11 +5,11 @@ export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   try {
-    const db = getDB();
+    const db = await getDB();
     const { action, username, password, currentPassword, newPassword } = await request.json();
 
     if (action === "login") {
-      const user = db.prepare("SELECT * FROM users WHERE username = ? AND password = ?").get(username, password) as any;
+      const user = (await db.execute({ sql: "SELECT * FROM users WHERE username = ? AND password = ?", args: [username, password] })).rows[0] as any;
       if (user) {
         return NextResponse.json({ success: true, username: user.username });
       }
@@ -17,11 +17,11 @@ export async function POST(request: Request) {
     }
 
     if (action === "change-password") {
-      const user = db.prepare("SELECT * FROM users WHERE username = ?").get(username) as any;
+      const user = (await db.execute({ sql: "SELECT * FROM users WHERE username = ?", args: [username] })).rows[0] as any;
       if (!user || user.password !== currentPassword) {
         return NextResponse.json({ error: "Current password is incorrect" }, { status: 400 });
       }
-      db.prepare("UPDATE users SET password = ? WHERE username = ?").run(newPassword, username);
+      await db.execute({ sql: "UPDATE users SET password = ? WHERE username = ?", args: [newPassword, username] });
       return NextResponse.json({ success: true });
     }
 
