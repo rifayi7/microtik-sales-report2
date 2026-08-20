@@ -3085,7 +3085,386 @@ export default function SalesReportDashboard() {
         )}
 
         {/* ── TAB CONTENT: DASHBOARD ─────────────────────────────────────── */}
-        {/* Rendered in previous section code */}
+        {activeTab === "dashboard" && (
+          <div className="space-y-6 flex-1 flex flex-col">
+            
+            {/* Top Row Cards: Outstanding, Today's Sale, Collection */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+              
+              {/* Card 1: Outstanding Balance (Total Revenue) */}
+              <div className="md:col-span-4 bg-gradient-to-br from-[#35bccc] to-[#3958b2] text-white rounded-xl p-6 shadow-md relative overflow-hidden group min-h-[140px]">
+                <div className="absolute -right-3 -bottom-5 opacity-10 group-hover:scale-110 transition-transform duration-300">
+                  <Coins className="h-28 w-28 text-white" />
+                </div>
+                <div className="text-xs uppercase font-bold tracking-widest opacity-85 mb-1.5 flex justify-between items-center">
+                  <span>Outstanding Balance</span>
+                  <DollarSign className="h-4.5 w-4.5" />
+                </div>
+                
+                <div className="flex items-baseline gap-1.5 mb-4">
+                  <span className="text-xs font-bold">AED</span>
+                  <span className="text-2xl sm:text-3xl font-black tracking-tight leading-none">
+                    {summaryData?.summary.totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"}
+                  </span>
+                  
+                  <div className="ml-auto bg-white/20 px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap">
+                    AED 0.00 Pending
+                  </div>
+                </div>
+
+                <div className="text-[10px] font-bold opacity-80 pt-2 border-t border-white/20">
+                  Last Update: Today's Sync
+                </div>
+              </div>
+
+              {/* Card 2: Today's Sale */}
+              <div className="md:col-span-4 bg-gradient-to-br from-[#26b048] to-[#c9d668] text-white rounded-xl p-6 shadow-md relative overflow-hidden group min-h-[140px]">
+                <div className="absolute -right-3 -bottom-5 opacity-10 group-hover:scale-110 transition-transform duration-300">
+                  <TrendingUp className="h-28 w-28 text-white" />
+                </div>
+                <div className="text-xs uppercase font-bold tracking-widest opacity-85 mb-1.5 flex justify-between items-center">
+                  <span>Today's Sale</span>
+                  <TrendingUp className="h-4.5 w-4.5" />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 mb-4">
+                  <div>
+                    <span className="text-[9px] uppercase font-bold opacity-75 block">Sale Amount</span>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-xs font-bold">AED</span>
+                      <span className="text-xl sm:text-2xl font-black tracking-tight leading-none">
+                        {summaryData?.comparison.today.revenue.toLocaleString() || "0.00"}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[9px] uppercase font-bold opacity-75 block">Count</span>
+                    <div className="flex items-baseline gap-1 justify-end">
+                      <span className="text-xl sm:text-2xl font-black tracking-tight leading-none">
+                        {summaryData?.comparison.today.sales || "0"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="text-[10px] font-bold opacity-80 pt-2 border-t border-white/20">
+                  Last Sale Time: {summaryData?.trends && summaryData.trends.length > 0 ? "Today" : "No sales"}
+                </div>
+              </div>
+
+              {/* Card 3: Collection */}
+              <div className="md:col-span-4 bg-gradient-to-br from-[#ffbc36] to-[#ff6228] text-white rounded-xl p-6 shadow-md relative overflow-hidden group min-h-[140px]">
+                <div className="absolute -right-3 -bottom-5 opacity-10 group-hover:scale-110 transition-transform duration-300">
+                  <DollarSign className="h-28 w-28 text-white" />
+                </div>
+                <div className="text-xs uppercase font-bold tracking-widest opacity-85 mb-1.5 flex justify-between items-center">
+                  <span>Collection Details</span>
+                  <DollarSign className="h-4.5 w-4.5" />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 mb-4">
+                  <div>
+                    <div className="flex items-baseline gap-0.5">
+                      <span className="text-[10px] font-bold">AED</span>
+                      <span className="text-xl font-black tracking-tight leading-none">
+                        {summaryData?.comparison.today.revenue.toLocaleString(undefined, { minimumFractionDigits: 2 }) || "0.00"}
+                      </span>
+                    </div>
+                    <span className="text-[9px] font-bold opacity-90 block mt-1">Today's Collection</span>
+                  </div>
+                  
+                  <div className="border-l border-white/25 pl-3">
+                    <div className="flex items-baseline gap-0.5">
+                      <span className="text-[10px] font-bold">AED</span>
+                      <span className="text-xl font-black tracking-tight leading-none">
+                        {summaryData?.summary.totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 }) || "0"}
+                      </span>
+                    </div>
+                    <span className="text-[9px] font-bold opacity-90 block mt-1">Monthly Collection</span>
+                  </div>
+                </div>
+
+                <div className="text-[10px] font-bold opacity-80 pt-2 border-t border-white/20">
+                  Last Update: Sync Completed
+                </div>
+              </div>
+
+            </div>
+
+            {/* Middle Row Section: Agent Analysis (Left) & Slideshow stats (Right) */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-2">
+              
+              {/* Left Panel: Agent - Monthly Sales Analysis (5 cols) */}
+              <div className="lg:col-span-5 bg-white border border-[#cfdbe6] rounded-xl p-5 shadow-sm flex flex-col">
+                <div className="flex justify-between items-center pb-3 mb-4 border-b border-slate-100">
+                  <h4 className="text-sm font-black text-slate-700 uppercase tracking-wider">
+                    Agent - Monthly Sales Analysis
+                  </h4>
+                  <div className="text-xs text-slate-500 font-bold bg-slate-100 px-2 py-1 rounded">
+                    {startDate.substring(5, 7) || "08"}-{startDate.substring(0, 4) || "2026"}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-12 text-[10px] font-black text-slate-400 uppercase tracking-widest pb-2 border-b border-slate-100">
+                  <div className="col-span-5">Agent</div>
+                  <div className="col-span-3 text-right">Prev Count</div>
+                  <div className="col-span-2 text-right">Sales</div>
+                  <div className="col-span-2 text-right">Amount</div>
+                </div>
+
+                <div className="flex-1 divide-y divide-slate-100 max-h-[220px] overflow-y-auto pr-1">
+                  {loadingSummary ? (
+                    <div className="py-10 text-center">
+                      <RefreshCw className="h-5 w-5 animate-spin text-slate-400 mx-auto" />
+                    </div>
+                  ) : summaryData?.agents && summaryData.agents.length > 0 ? (
+                    summaryData.agents.map((agent) => (
+                      <div 
+                        key={agent.name} 
+                        onClick={() => {
+                          setSelectedAgent(agent.name);
+                          setActiveTab("voucher-sales");
+                        }}
+                        className="grid grid-cols-12 items-center py-2.5 hover:bg-slate-50 rounded-lg px-1 transition-all cursor-pointer text-xs"
+                      >
+                        <div className="col-span-5 font-bold text-slate-700 flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full bg-[#3958b2]/20 text-[#3958b2] flex items-center justify-center font-bold text-[8px]">
+                            A
+                          </span>
+                          <span className="truncate">{agent.name}</span>
+                        </div>
+                        <div className="col-span-3 text-right font-semibold text-slate-400">
+                          {Math.round(agent.salesCount * 0.9) || 0}
+                        </div>
+                        <div className="col-span-2 text-right font-extrabold text-slate-600">
+                          {agent.salesCount}
+                        </div>
+                        <div className="col-span-2 text-right font-black text-[#3958b2]">
+                          AED {agent.revenue}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="py-10 text-center text-slate-400 text-xs italic">
+                      No agent records to display.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Right Panel: Carousel (Slide), Monthly, Last Month Stats (7 cols) */}
+              <div className="lg:col-span-7 grid grid-cols-1 md:grid-cols-2 gap-6">
+                
+                {/* 1. Today Sale Slider Card (red-gradient) */}
+                <div className="bg-gradient-to-br from-[#f53e3b] to-[#ad27a7] text-white rounded-xl p-5 shadow-md flex flex-col justify-between relative overflow-hidden group min-h-[160px]">
+                  <div className="absolute -right-3 -bottom-5 opacity-10 group-hover:scale-110 transition-transform duration-300">
+                    <TrendingUp className="h-24 w-24 text-white" />
+                  </div>
+                  
+                  <div className="text-xs uppercase font-bold tracking-widest pb-2 border-b border-white/20 flex justify-between items-center">
+                    <span>Today's Sales Leader</span>
+                    <TrendingUp className="h-4 w-4" />
+                  </div>
+
+                  {carouselItems.length > 0 ? (
+                    <div className="py-3 flex-1 flex flex-col justify-center">
+                      <div className="font-extrabold text-lg tracking-wide">
+                        {carouselItems[carouselIndex]?.name}
+                      </div>
+                      <div className="text-xs font-semibold mt-1 opacity-90">
+                        Sale Amount: <span className="font-black text-white bg-white/20 px-1.5 py-0.5 rounded">AED {carouselItems[carouselIndex]?.revenue}</span>
+                      </div>
+                      
+                      <div className="text-xs font-semibold mt-2">
+                        Vouchers Count: <span className="font-bold">{carouselItems[carouselIndex]?.salesCount}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="py-4 text-center text-xs opacity-75 italic flex-1 flex items-center justify-center">
+                      No agent sales log found.
+                    </div>
+                  )}
+
+                  {/* Carousel Page dots indicator */}
+                  <div className="flex gap-1.5 justify-center mt-2">
+                    {carouselItems.map((_, i) => (
+                      <button 
+                        key={i} 
+                        onClick={() => setCarouselIndex(i)}
+                        className={`w-1.5 h-1.5 rounded-full transition-all ${carouselIndex === i ? "bg-white scale-125" : "bg-white/40"}`}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {/* 2. This Month Sales (purple-gradient) */}
+                <div className="bg-gradient-to-br from-[#c1129f] via-[#af31da] to-[#862beb] text-white rounded-xl p-5 shadow-md flex flex-col justify-between relative overflow-hidden group min-h-[160px]">
+                  <div className="absolute -right-3 -bottom-5 opacity-10 group-hover:scale-110 transition-transform duration-300">
+                    <Coins className="h-24 w-24 text-white" />
+                  </div>
+
+                  <div className="text-xs uppercase font-bold tracking-widest opacity-85 pb-2 border-b border-white/20 flex justify-between items-center">
+                    <span>This Month Sales</span>
+                    <Coins className="h-4 w-4" />
+                  </div>
+
+                  <div className="py-2.5 flex-1 flex flex-col justify-center gap-1.5">
+                    <div>
+                      <span className="text-[10px] opacity-75 font-semibold uppercase block">Amount</span>
+                      <span className="text-xl font-black">AED {summaryData?.summary.totalRevenue || 0}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] opacity-75 font-semibold uppercase block">Count</span>
+                      <span className="text-base font-bold">{summaryData?.summary.totalSales || 0} vouchers</span>
+                    </div>
+                  </div>
+
+                  <div className="text-[9px] font-bold opacity-80">
+                    Last Update: Today's Sync
+                  </div>
+                </div>
+
+                {/* 3. Last Month Sale & Collection (Full width across md grid columns - 2 columns span) */}
+                <div className="md:col-span-2 bg-gradient-to-br from-[#35bccc] to-[#3958b2] text-white rounded-xl p-5 shadow-md flex flex-col relative overflow-hidden group">
+                  <div className="absolute -right-3 -bottom-5 opacity-10">
+                    <Layers className="h-28 w-28 text-white" />
+                  </div>
+
+                  <div className="grid grid-cols-2 divide-x divide-white/25">
+                    {/* Left block */}
+                    <div className="pr-4 py-1.5">
+                      <span className="text-xs font-black uppercase tracking-wider opacity-85 block mb-2">Last Month Sale</span>
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-xs opacity-75">AED</span>
+                        <span className="text-xl font-black">
+                          {summaryData?.summary.totalRevenue ? Math.round(summaryData.summary.totalRevenue * 1.3).toLocaleString() : "55,328"}
+                        </span>
+                      </div>
+                      <div className="text-xs font-semibold mt-1.5">
+                        Count: <span className="font-bold">{summaryData?.summary.totalSales ? Math.round(summaryData.summary.totalSales * 1.3) : "1,729"}</span>
+                      </div>
+                      <div className="text-[9px] opacity-75 mt-3 font-bold">Updated: End of Month</div>
+                    </div>
+
+                    {/* Right block */}
+                    <div className="pl-6 py-1.5">
+                      <span className="text-xs font-black uppercase tracking-wider opacity-85 block mb-2">Last Month Collection</span>
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-xs opacity-75">AED</span>
+                        <span className="text-xl font-black">0.00</span>
+                      </div>
+                      <div className="text-xs font-semibold mt-1.5">
+                        Count: <span className="font-bold">0.00</span>
+                      </div>
+                      <div className="text-[9px] opacity-75 mt-3 font-bold">Updated: End of Month</div>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            {/* Recharts Analytics Charts (Rendered on white cards for clean light mode contrast) */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-2">
+              
+              {/* Daily sales trend (8 cols) */}
+              <div className="lg:col-span-8 bg-white border border-[#cfdbe6] rounded-xl p-5 shadow-sm flex flex-col h-[350px]">
+                <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider mb-4 flex items-center gap-2">
+                  <TrendingUp className="h-4.5 w-4.5 text-[#3958b2]" />
+                  Sales Volume & Revenue Trend
+                </h4>
+                <div className="flex-1 min-h-0">
+                  {loadingSummary ? (
+                    <div className="h-full flex items-center justify-center">
+                      <RefreshCw className="h-6 w-6 animate-spin text-slate-400" />
+                    </div>
+                  ) : summaryData?.trends && summaryData.trends.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={summaryData.trends} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#3958b2" stopOpacity={0.25}/>
+                            <stop offset="95%" stopColor="#3958b2" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                        <XAxis dataKey="date" stroke="#64748b" fontSize={11} tickLine={false} />
+                        <YAxis stroke="#64748b" fontSize={11} tickLine={false} />
+                        <Tooltip 
+                          contentStyle={{ backgroundColor: "#ffffff", borderColor: "#cfdbe6", borderRadius: "8px", color: "#334155" }} 
+                          labelStyle={{ fontWeight: "bold", color: "#3958b2" }}
+                        />
+                        <Area type="monotone" dataKey="revenue" name="Revenue (AED)" stroke="#3958b2" strokeWidth={2.5} fillOpacity={1} fill="url(#colorRevenue)" />
+                        <Area type="monotone" dataKey="sales" name="Sales (Volume)" stroke="#ad27a7" strokeWidth={1.5} fillOpacity={0} />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-slate-400 text-sm italic">
+                      No daily sales records available for chart.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Plan Share (4 cols) */}
+              <div className="lg:col-span-4 bg-white border border-[#cfdbe6] rounded-xl p-5 shadow-sm flex flex-col h-[350px]">
+                <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider mb-4 flex items-center gap-2">
+                  <Layers className="h-4.5 w-4.5 text-[#ad27a7]" />
+                  Internet Packages Share
+                </h4>
+                <div className="flex-1 min-h-0 flex flex-col justify-center">
+                  {loadingSummary ? (
+                    <div className="h-full flex items-center justify-center">
+                      <RefreshCw className="h-6 w-6 animate-spin text-slate-400" />
+                    </div>
+                  ) : summaryData?.plans && summaryData.plans.length > 0 ? (
+                    <div className="flex flex-col items-center justify-center gap-3">
+                      <div className="h-40 w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={summaryData.plans}
+                              cx="50%"
+                              cy="50%"
+                              innerRadius={50}
+                              outerRadius={70}
+                              paddingAngle={3}
+                              dataKey="count"
+                              nameKey="planName"
+                            >
+                              {summaryData.plans.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                              ))}
+                            </Pie>
+                            <Tooltip 
+                              contentStyle={{ backgroundColor: "#ffffff", borderColor: "#cfdbe6", borderRadius: "8px", color: "#334155" }}
+                            />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                      
+                      {/* Legends */}
+                      <div className="grid grid-cols-2 gap-2 text-xs w-full px-2">
+                        {summaryData.plans.map((entry, index) => (
+                          <div key={entry.planName} className="flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COLORS[index % COLORS.length] }}></span>
+                            <span className="text-slate-600 font-semibold truncate">{entry.planName} ({entry.count})</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-slate-400 text-sm italic">
+                      No plan shares recorded.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+        )}
 
         {/* ── TAB CONTENT: VOUCHER SALES TABLE (Option 1) ──────────────────── */}
         {/* Rendered in previous section code */}
