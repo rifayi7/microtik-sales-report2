@@ -2099,6 +2099,92 @@ export default function SalesReportDashboard() {
           </section>
         )}
 
+        {/* ── Voucher Sales Table Content ── */}
+        {activeTab === "voucher-sales" && (
+          <div className="bg-white border border-[#cfdbe6] rounded-xl shadow-sm overflow-hidden flex-1 flex flex-col min-h-0">
+            <div className="flex-1 overflow-x-auto min-h-0">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-[#cfdbe6] bg-slate-50 font-black text-slate-600">
+                    <th className="px-6 py-4">Date & Time</th>
+                    <th className="px-6 py-4">Voucher Code</th>
+                    <th className="px-6 py-4">Validity</th>
+                    <th className="px-6 py-4">Sold By</th>
+                    <th className="px-6 py-4">Customer Mobile</th>
+                    <th className="px-6 py-4">Router ID</th>
+                    <th className="px-6 py-4 text-right">Price</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                  {loadingSales ? (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-12 text-center">
+                        <RefreshCw className="h-5 w-5 animate-spin text-slate-400 mx-auto" />
+                      </td>
+                    </tr>
+                  ) : salesData?.sales && salesData.sales.length > 0 ? (
+                    salesData.sales.map((record) => (
+                      <tr key={record.code} className="hover:bg-slate-50/50 transition-all">
+                        <td className="px-6 py-3 text-slate-500 whitespace-nowrap">{record.timestamp}</td>
+                        <td className="px-6 py-3 font-bold text-[#3958b2]">{record.code}</td>
+                        <td className="px-6 py-3">
+                          <span className="bg-purple-50 text-purple-600 px-2 py-0.5 rounded font-black text-[10px]">
+                            {record.validity} Days
+                          </span>
+                        </td>
+                        <td className="px-6 py-3">{record.seller || <span className="text-slate-400 italic">Direct / System</span>}</td>
+                        <td className="px-6 py-3 font-mono">{record.mobile || "—"}</td>
+                        <td className="px-6 py-3 text-slate-400 font-mono text-[10px]">{record.routerId}</td>
+                        <td className="px-6 py-3 text-right font-black text-slate-800">AED {record.price}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-10 text-center text-slate-400 italic">
+                        No sales transactions match the filtered criteria.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+
+                {!loadingSales && salesData?.sales && salesData.sales.length > 0 && (
+                  <tfoot className="bg-slate-50 border-t border-[#cfdbe6] font-bold text-xs text-slate-800">
+                    <tr>
+                      <td colSpan={6} className="px-6 py-3 text-right font-extrabold">Total</td>
+                      <td className="px-6 py-3 text-right font-black text-[#3958b2]">AED {pageTotalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+
+            {/* Pagination Controls */}
+            {salesData?.pagination && salesData.pagination.totalPages > 1 && (
+              <div className="bg-slate-50 border-t border-[#cfdbe6] px-6 py-4 flex items-center justify-between text-xs font-bold text-slate-500">
+                <div>
+                  Showing Page <span className="text-slate-800">{salesPage}</span> of <span className="text-slate-800">{salesData.pagination.totalPages}</span> ({salesData.pagination.totalCount} total sales)
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    disabled={salesPage === 1 || loadingSales}
+                    onClick={() => fetchSales(salesPage - 1)}
+                    className="p-2 border border-slate-300 rounded bg-white hover:bg-slate-50 disabled:opacity-50 transition-colors"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  <button
+                    disabled={salesPage === salesData.pagination.totalPages || loadingSales}
+                    onClick={() => fetchSales(salesPage + 1)}
+                    className="p-2 border border-slate-300 rounded bg-white hover:bg-slate-50 disabled:opacity-50 transition-colors"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ── 2. FILTER BAR (Monthly Voucher Sales - Option 2) ────────────── */}
         {activeTab === "monthly-sales" && (
           <section className="bg-white border border-[#cfdbe6] rounded-xl p-5 mb-6 shadow-sm">
