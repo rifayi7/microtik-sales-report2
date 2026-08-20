@@ -218,8 +218,8 @@ export async function initializeDB() {
     await db.batch([
       { sql: "INSERT INTO sales_pricing (validity_days, price) VALUES (?, ?)", args: [7, 70] },
       { sql: "INSERT INTO sales_pricing (validity_days, price) VALUES (?, ?)", args: [10, 100] },
-      { sql: "INSERT INTO sales_pricing (validity_days, price) VALUES (?, ?)", args: [15, 150] },
-      { sql: "INSERT INTO sales_pricing (validity_days, price) VALUES (?, ?)", args: [30, 300] },
+      { sql: "INSERT INTO sales_pricing (validity_days, price) VALUES (?, ?)", args: [15, 16] },
+      { sql: "INSERT INTO sales_pricing (validity_days, price) VALUES (?, ?)", args: [30, 32] },
     ], "write");
   }
 
