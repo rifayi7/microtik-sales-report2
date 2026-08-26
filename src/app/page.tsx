@@ -24,6 +24,7 @@ import {
   Plus,
   Trash2,
   Edit,
+  Building2,
   X
 } from "lucide-react";
 import { 
@@ -78,7 +79,12 @@ interface SummaryData {
     today: { sales: number; revenue: number };
     yesterday: { sales: number; revenue: number };
   };
+  lastMonth?: {
+    sales: { count: number; revenue: number };
+    collection: { count: number; revenue: number };
+  };
   agents: { name: string; salesCount: number; revenue: number }[];
+  camps?: { campName: string; salesCount: number; revenue: number }[];
   plans: { planName: string; count: number; revenue: number }[];
   trends: { date: string; sales: number; revenue: number }[];
 }
@@ -269,8 +275,11 @@ export default function SalesReportDashboard() {
   const [savingPrice, setSavingPrice] = useState<number | null>(null);
   const [salesPage, setSalesPage] = useState(1);
   
-  // Carousel State for Today's Sales (Dashboard)
-  const [carouselIndex, setCarouselIndex] = useState(0);
+  // Carousel State for Camps Sales (Dashboard)
+  const [campCarouselIndex, setCampCarouselIndex] = useState(0);
+  const [isCarouselPaused, setIsCarouselPaused] = useState(false);
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const [touchEndX, setTouchEndX] = useState<number | null>(null);
 
   // Dropdown States for Header Navigation
   const [activeDropdown, setActiveDropdown] = useState<"sales" | "reports" | "masters" | "payments" | "expenses" | null>(null);
@@ -1182,6 +1191,7 @@ export default function SalesReportDashboard() {
     if (activeTab === "dashboard") {
       fetchSummary();
       fetchSales(1);
+      fetchCamps();
     } else if (activeTab === "voucher-sales") {
       fetchSales(1);
     } else if (activeTab === "monthly-sales") {
@@ -1254,14 +1264,7 @@ export default function SalesReportDashboard() {
     isMounted
   ]);
 
-  // Carousel slider effect for dashboard leader
-  useEffect(() => {
-    if (activeTab !== "dashboard" || !summaryData?.agents || summaryData.agents.length === 0) return;
-    const interval = setInterval(() => {
-      setCarouselIndex((prev) => (prev + 1) % Math.min(summaryData.agents.length, 5));
-    }, 4000);
-    return () => clearInterval(interval);
-  }, [activeTab, summaryData]);
+
 
   // Handle Search Input Form
   const handleSearchSubmit = (e: React.FormEvent) => {
@@ -1488,6 +1491,98 @@ export default function SalesReportDashboard() {
     if (!salesData?.sales) return [];
     return Array.from(new Set(salesData.sales.map(s => s.routerId || "Direct/System")));
   }, [salesData]);
+
+  // Camp sales data for Dashboard Camps Carousel
+  const campCarouselItems = useMemo(() => {
+    if (summaryData?.camps && summaryData.camps.length > 0) {
+      return summaryData.camps.map((c) => {
+        if (c.campName.startsWith("router-") && campsList.length > 0) {
+          const match = campsList.find(
+            (camp) => camp.name === c.campName || camp.hotspot_name === c.campName || String(camp.id) === c.campName
+          );
+          if (match) return { ...c, campName: match.name };
+        }
+        return c;
+      });
+    }
+    if (paymentCampData && paymentCampData.length > 0) {
+      return paymentCampData.map((c: any) => ({
+        campName: c.campName || "Camp",
+        salesCount: c.salesCount || 0,
+        revenue: c.totalAmount || 0,
+      }));
+    }
+    if (campsList && campsList.length > 0) {
+      return campsList.map((camp: any) => ({
+        campName: camp.name || "Camp",
+        salesCount: 0,
+        revenue: 0,
+      }));
+    }
+    if (campList && campList.length > 0) {
+      return campList.map((camp: string) => ({
+        campName: camp,
+        salesCount: 0,
+        revenue: 0,
+      }));
+    }
+    return [];
+  }, [summaryData, paymentCampData, campsList, campList]);
+
+  // Auto-slide effect for Camps Carousel
+  useEffect(() => {
+    if (campCarouselItems.length <= 1 || isCarouselPaused) return;
+    const interval = setInterval(() => {
+      setCampCarouselIndex((prev) => (prev + 1) % campCarouselItems.length);
+    }, 3500);
+    return () => clearInterval(interval);
+  }, [campCarouselItems.length, isCarouselPaused]);
+
+  // Touch and drag swipe handlers for Camps Carousel
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStartX(e.targetTouches[0].clientX);
+    setIsCarouselPaused(true);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    setTouchEndX(e.targetTouches[0].clientX);
+  };
+
+  const handleTouchEnd = () => {
+    if (touchStartX !== null && touchEndX !== null) {
+      const distance = touchStartX - touchEndX;
+      const minSwipeDistance = 35;
+      if (distance > minSwipeDistance) {
+        // Swiped left -> Next camp
+        setCampCarouselIndex((prev) => (prev + 1) % (campCarouselItems.length || 1));
+      } else if (distance < -minSwipeDistance) {
+        // Swiped right -> Prev camp
+        setCampCarouselIndex((prev) => (prev - 1 + (campCarouselItems.length || 1)) % (campCarouselItems.length || 1));
+      }
+    }
+    setTouchStartX(null);
+    setTouchEndX(null);
+    setIsCarouselPaused(false);
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    setTouchStartX(e.clientX);
+    setIsCarouselPaused(true);
+  };
+
+  const handleMouseUp = (e: React.MouseEvent) => {
+    if (touchStartX !== null) {
+      const distance = touchStartX - e.clientX;
+      const minSwipeDistance = 35;
+      if (distance > minSwipeDistance) {
+        setCampCarouselIndex((prev) => (prev + 1) % (campCarouselItems.length || 1));
+      } else if (distance < -minSwipeDistance) {
+        setCampCarouselIndex((prev) => (prev - 1 + (campCarouselItems.length || 1)) % (campCarouselItems.length || 1));
+      }
+    }
+    setTouchStartX(null);
+    setIsCarouselPaused(false);
+  };
 
   // Calculate current page's sum for Voucher Sales footer
   const pageTotalRevenue = useMemo(() => {
@@ -3255,46 +3350,95 @@ export default function SalesReportDashboard() {
               {/* Right Panel: Carousel (Slide), Monthly, Last Month Stats (7 cols) */}
               <div className="lg:col-span-7 grid grid-cols-1 md:grid-cols-2 gap-6">
                 
-                {/* 1. Today Sale Slider Card (red-gradient) */}
-                <div className="bg-gradient-to-br from-[#f53e3b] to-[#ad27a7] text-white rounded-xl p-5 shadow-md flex flex-col justify-between relative overflow-hidden group min-h-[160px]">
-                  <div className="absolute -right-3 -bottom-5 opacity-10 group-hover:scale-110 transition-transform duration-300">
-                    <TrendingUp className="h-24 w-24 text-white" />
+                {/* 1. Camps Sales Slider Card (red-purple gradient with auto-slide & swipe/scroll) */}
+                <div 
+                  onMouseEnter={() => setIsCarouselPaused(true)}
+                  onMouseLeave={() => setIsCarouselPaused(false)}
+                  onTouchStart={handleTouchStart}
+                  onTouchMove={handleTouchMove}
+                  onTouchEnd={handleTouchEnd}
+                  onMouseDown={handleMouseDown}
+                  onMouseUp={handleMouseUp}
+                  className="bg-gradient-to-br from-[#f53e3b] via-[#e11d48] to-[#ad27a7] text-white rounded-xl p-5 shadow-md flex flex-col justify-between relative overflow-hidden group min-h-[160px] select-none cursor-grab active:cursor-grabbing transition-all"
+                >
+                  <div className="absolute -right-3 -bottom-5 opacity-10 group-hover:scale-110 transition-transform duration-300 pointer-events-none">
+                    <Building2 className="h-24 w-24 text-white" />
                   </div>
                   
-                  <div className="text-xs uppercase font-bold tracking-widest pb-2 border-b border-white/20 flex justify-between items-center">
-                    <span>Today's Sales Leader</span>
-                    <TrendingUp className="h-4 w-4" />
+                  {/* Card Header with Counter & Prev/Next buttons */}
+                  <div className="text-xs uppercase font-bold tracking-widest pb-2 border-b border-white/20 flex justify-between items-center z-10">
+                    <div className="flex items-center gap-1.5">
+                      <Building2 className="h-4 w-4" />
+                      <span>Camps Sales</span>
+                    </div>
+
+                    {campCarouselItems.length > 1 && (
+                      <div className="flex items-center gap-1">
+                        <span className="text-[10px] font-bold opacity-80 mr-1">
+                          {campCarouselIndex + 1}/{campCarouselItems.length}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCampCarouselIndex((prev) => (prev - 1 + campCarouselItems.length) % campCarouselItems.length);
+                          }}
+                          className="p-0.5 rounded hover:bg-white/20 transition-colors"
+                          title="Previous Camp"
+                        >
+                          <ChevronLeft className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCampCarouselIndex((prev) => (prev + 1) % campCarouselItems.length);
+                          }}
+                          className="p-0.5 rounded hover:bg-white/20 transition-colors"
+                          title="Next Camp"
+                        >
+                          <ChevronRight className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    )}
                   </div>
 
-                  {carouselItems.length > 0 ? (
-                    <div className="py-3 flex-1 flex flex-col justify-center">
-                      <div className="font-extrabold text-lg tracking-wide">
-                        {carouselItems[carouselIndex]?.name}
+                  {/* Card Main Body with current camp metrics */}
+                  {campCarouselItems.length > 0 ? (
+                    <div className="py-2.5 flex-1 flex flex-col justify-center z-10">
+                      <div className="font-extrabold text-lg tracking-wide truncate flex items-center gap-1.5">
+                        <span>{campCarouselItems[campCarouselIndex]?.campName}</span>
                       </div>
-                      <div className="text-xs font-semibold mt-1 opacity-90">
-                        Sale Amount: <span className="font-black text-white bg-white/20 px-1.5 py-0.5 rounded">AED {carouselItems[carouselIndex]?.revenue}</span>
+                      <div className="text-xs font-semibold mt-1.5 opacity-95">
+                        Sale Amount: <span className="font-black text-white bg-white/25 px-2 py-0.5 rounded shadow-sm">AED {Number(campCarouselItems[campCarouselIndex]?.revenue || 0).toLocaleString()}</span>
                       </div>
                       
-                      <div className="text-xs font-semibold mt-2">
-                        Vouchers Count: <span className="font-bold">{carouselItems[carouselIndex]?.salesCount}</span>
+                      <div className="text-xs font-semibold mt-1.5 opacity-90 flex items-center gap-2">
+                        <span>Vouchers Count: <span className="font-black">{campCarouselItems[campCarouselIndex]?.salesCount || 0}</span></span>
                       </div>
                     </div>
                   ) : (
-                    <div className="py-4 text-center text-xs opacity-75 italic flex-1 flex items-center justify-center">
-                      No agent sales log found.
+                    <div className="py-4 text-center text-xs opacity-75 italic flex-1 flex items-center justify-center z-10">
+                      No camp sales records found.
                     </div>
                   )}
 
                   {/* Carousel Page dots indicator */}
-                  <div className="flex gap-1.5 justify-center mt-2">
-                    {carouselItems.map((_, i) => (
-                      <button 
-                        key={i} 
-                        onClick={() => setCarouselIndex(i)}
-                        className={`w-1.5 h-1.5 rounded-full transition-all ${carouselIndex === i ? "bg-white scale-125" : "bg-white/40"}`}
-                      />
-                    ))}
-                  </div>
+                  {campCarouselItems.length > 1 && (
+                    <div className="flex gap-1.5 justify-center items-center mt-1 z-10">
+                      {campCarouselItems.map((_, i) => (
+                        <button 
+                          key={i} 
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCampCarouselIndex(i);
+                          }}
+                          className={`h-1.5 rounded-full transition-all ${campCarouselIndex === i ? "bg-white w-4" : "bg-white/40 w-1.5 hover:bg-white/70"}`}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* 2. This Month Sales (purple-gradient) */}
@@ -3331,32 +3475,34 @@ export default function SalesReportDashboard() {
                   </div>
 
                   <div className="grid grid-cols-2 divide-x divide-white/25">
-                    {/* Left block */}
+                    {/* Left block: Last Month Sale */}
                     <div className="pr-4 py-1.5">
                       <span className="text-xs font-black uppercase tracking-wider opacity-85 block mb-2">Last Month Sale</span>
                       <div className="flex items-baseline gap-1.5">
                         <span className="text-xs opacity-75">AED</span>
                         <span className="text-xl font-black">
-                          {summaryData?.summary.totalRevenue ? Math.round(summaryData.summary.totalRevenue * 1.3).toLocaleString() : "55,328"}
+                          {Number(summaryData?.lastMonth?.sales?.revenue || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                         </span>
                       </div>
                       <div className="text-xs font-semibold mt-1.5">
-                        Count: <span className="font-bold">{summaryData?.summary.totalSales ? Math.round(summaryData.summary.totalSales * 1.3) : "1,729"}</span>
+                        Count: <span className="font-bold">{summaryData?.lastMonth?.sales?.count || 0} vouchers</span>
                       </div>
-                      <div className="text-[9px] opacity-75 mt-3 font-bold">Updated: End of Month</div>
+                      <div className="text-[9px] opacity-75 mt-3 font-bold">Updated: Last Month Database Sync</div>
                     </div>
 
-                    {/* Right block */}
+                    {/* Right block: Last Month Collection */}
                     <div className="pl-6 py-1.5">
                       <span className="text-xs font-black uppercase tracking-wider opacity-85 block mb-2">Last Month Collection</span>
                       <div className="flex items-baseline gap-1.5">
                         <span className="text-xs opacity-75">AED</span>
-                        <span className="text-xl font-black">0.00</span>
+                        <span className="text-xl font-black">
+                          {Number(summaryData?.lastMonth?.collection?.revenue || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                        </span>
                       </div>
                       <div className="text-xs font-semibold mt-1.5">
-                        Count: <span className="font-bold">0.00</span>
+                        Count: <span className="font-bold">{summaryData?.lastMonth?.collection?.count || 0} payments</span>
                       </div>
-                      <div className="text-[9px] opacity-75 mt-3 font-bold">Updated: End of Month</div>
+                      <div className="text-[9px] opacity-75 mt-3 font-bold">Updated: Verified Payments</div>
                     </div>
                   </div>
                 </div>

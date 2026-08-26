@@ -77,9 +77,29 @@ export async function GET(request: Request) {
       revenue: number;
     }[];
 
+    // 5. Get Sales Performance by Camp (Router)
+    const campSql = `
+      SELECT 
+        COALESCE(NULLIF(r.camp, ''), NULLIF(r.sessionName, ''), NULLIF(c.name, ''), NULLIF(v.router_id, ''), 'Camp') as campName, 
+        COUNT(*) as salesCount, 
+        SUM(COALESCE(v.price_charged, 0)) as revenue 
+      FROM vouchers v
+      LEFT JOIN routers r ON (CAST(r.id AS TEXT) = CAST(v.router_id AS TEXT) OR r.sessionName = v.router_id)
+      LEFT JOIN camps c ON (v.router_id = c.name OR CAST(v.router_id AS TEXT) = CAST(c.id AS TEXT) OR v.router_id = c.hotspot_name)
+      ${whereClause} AND v.router_id IS NOT NULL AND v.router_id != ''
+      GROUP BY campName
+      ORDER BY revenue DESC
+    `;
+    const camps = (await db.execute({ sql: campSql, args: [...params] })).rows as unknown as {
+      campName: string;
+      salesCount: number;
+      revenue: number;
+    }[];
+
     let finalAgents = agents;
     let finalPlans = plans;
     let finalTrends = trends;
+    let finalCamps = camps;
     
     const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
     const yesterdayDate = new Date(Date.now() - 86400000);
@@ -105,49 +125,62 @@ export async function GET(request: Request) {
     let yesterdaySales = yesterdayStats?.count || 0;
     let yesterdayRevenue = yesterdayStats?.revenue || 0;
 
-    if (totalSales === 0) {
-      totalSales = 142;
-      totalRevenue = 4820.00;
-      finalAgents = [
-        { name: "Akif", salesCount: 45, revenue: 1520.00 },
-        { name: "Muzain", salesCount: 38, revenue: 1280.00 },
-        { name: "rahul", salesCount: 25, revenue: 850.00 },
-        { name: "Rimal-1", salesCount: 20, revenue: 710.00 },
-        { name: "ysg1", salesCount: 14, revenue: 460.00 }
-      ];
-      finalPlans = [
-        { planName: "30-Days", count: 65, revenue: 2210.00 },
-        { planName: "15-Days", count: 38, revenue: 1290.00 },
-        { planName: "7-Days", count: 24, revenue: 820.00 },
-        { planName: "10-Days", count: 15, revenue: 500.00 }
-      ];
-      finalTrends = [
-        { date: "2026-08-05", sales: 12, revenue: 410.00 },
-        { date: "2026-08-06", sales: 15, revenue: 510.00 },
-        { date: "2026-08-07", sales: 18, revenue: 610.00 },
-        { date: "2026-08-08", sales: 22, revenue: 750.00 },
-        { date: "2026-08-09", sales: 25, revenue: 850.00 },
-        { date: "2026-08-10", sales: 28, revenue: 950.00 },
-        { date: "2026-08-11", sales: 22, revenue: 740.00 }
-      ];
-      todaySales = 22;
-      todayRevenue = 740.00;
-      yesterdaySales = 28;
-      yesterdayRevenue = 950.00;
-    }
+    // Real Dynamic Last Month Sales and Collections Calculation
+    const now = new Date();
+    const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastMonthYear = lastMonthDate.getFullYear();
+    const lastMonthNum = String(lastMonthDate.getMonth() + 1).padStart(2, "0");
+    const lastMonthYearMonth = `${lastMonthYear}-${lastMonthNum}`;
+    const lastMonthStart = `${lastMonthYearMonth}-01 00:00:00`;
+    const lastDayOfPrevMonth = new Date(lastMonthYear, lastMonthDate.getMonth() + 1, 0).getDate();
+    const lastMonthEnd = `${lastMonthYearMonth}-${String(lastDayOfPrevMonth).padStart(2, "0")} 23:59:59`;
+
+    const lastMonthSalesSql = `
+      SELECT COUNT(*) as count, SUM(COALESCE(v.price_charged, 0)) as revenue
+      FROM vouchers v
+      WHERE v.status = 'redeemed' AND v.used_at >= ? AND v.used_at <= ?
+    `;
+    const lastMonthSalesRow = (await db.execute({ sql: lastMonthSalesSql, args: [lastMonthStart, lastMonthEnd] })).rows[0] as unknown as {
+      count: number;
+      revenue: number | null;
+    };
+
+    const lastMonthCollectionSql = `
+      SELECT COUNT(*) as count, SUM(COALESCE(amount, 0)) as revenue
+      FROM payments
+      WHERE paid_for_year_month = ? OR (payment_date >= ? AND payment_date <= ?)
+    `;
+    const lastMonthCollectionRow = (await db.execute({ 
+      sql: lastMonthCollectionSql, 
+      args: [lastMonthYearMonth, `${lastMonthYearMonth}-01`, `${lastMonthYearMonth}-${String(lastDayOfPrevMonth).padStart(2, "0")}`] 
+    })).rows[0] as unknown as {
+      count: number;
+      revenue: number | null;
+    };
 
     return NextResponse.json({
       success: true,
       summary: {
         totalSales,
-        totalRevenue,
+        totalRevenue: totalRevenue || 0,
         activeAgentsCount: finalAgents.length,
       },
       comparison: {
         today: { sales: todaySales, revenue: todayRevenue },
         yesterday: { sales: yesterdaySales, revenue: yesterdayRevenue },
       },
+      lastMonth: {
+        sales: {
+          count: lastMonthSalesRow?.count || 0,
+          revenue: lastMonthSalesRow?.revenue || 0,
+        },
+        collection: {
+          count: lastMonthCollectionRow?.count || 0,
+          revenue: lastMonthCollectionRow?.revenue || 0,
+        }
+      },
       agents: finalAgents,
+      camps: finalCamps,
       plans: finalPlans,
       trends: finalTrends,
     });
