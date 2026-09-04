@@ -19,6 +19,8 @@ export function buildWhereClause(searchParams: URLSearchParams): {
   const agent = searchParams.get("agent");
   const validity = searchParams.get("validity");
   const router = searchParams.get("router");
+  const camp = searchParams.get("camp");
+  const soldType = searchParams.get("soldType");
   const search = searchParams.get("search");
 
   // Date filtering: SQLite stores datetime('now') as 'YYYY-MM-DD HH:MM:SS' (UTC)
@@ -48,6 +50,21 @@ export function buildWhereClause(searchParams: URLSearchParams): {
   if (router && router !== "all" && router !== "") {
     conditions.push("v.router_id = ?");
     params.push(router);
+  }
+
+  if (camp && camp !== "all" && camp !== "") {
+    conditions.push(`(
+      v.router_id IN (SELECT id FROM routers WHERE camp = ?) 
+      OR v.router_id IN (SELECT sessionName FROM routers WHERE camp = ?) 
+      OR v.router_id = ?
+    )`);
+    params.push(camp, camp, camp);
+  }
+
+  if (soldType === "paid") {
+    conditions.push("COALESCE(v.price_charged, 0) > 0");
+  } else if (soldType === "free") {
+    conditions.push("COALESCE(v.price_charged, 0) = 0");
   }
 
   if (search && search.trim() !== "") {

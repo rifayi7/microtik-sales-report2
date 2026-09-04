@@ -111,6 +111,8 @@ interface SalesData {
     agents: string[];
     routers: string[];
     plans: number[];
+    camps?: string[];
+    companies?: string[];
   };
 }
 
@@ -142,6 +144,8 @@ export default function SalesReportDashboard() {
   const [selectedAgent, setSelectedAgent] = useState("all");
   const [selectedValidity, setSelectedValidity] = useState("all");
   const [selectedRouter, setSelectedRouter] = useState("all");
+  const [selectedCamp, setSelectedCamp] = useState("all");
+  const [selectedSoldType, setSelectedSoldType] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [entriesLimit, setEntriesLimit] = useState(100);
   
@@ -320,6 +324,17 @@ export default function SalesReportDashboard() {
     
     setRegExpense(prev => ({ ...prev, expense_date: todayStr }));
     setCommExpense(prev => ({ ...prev, expense_date: todayStr }));
+
+    // Dynamically load camps and companies on initial mount
+    fetch("/api/reports/camps")
+      .then(res => res.json())
+      .then(d => { if (d.success && Array.isArray(d.data)) setCampsList(d.data); })
+      .catch(console.error);
+
+    fetch("/api/reports/companies")
+      .then(res => res.json())
+      .then(d => { if (d.success && Array.isArray(d.data)) setCompaniesList(d.data); })
+      .catch(console.error);
   }, []);
 
   // Sync Monthly Voucher Sales filter to startDate/endDate
@@ -467,6 +482,8 @@ export default function SalesReportDashboard() {
       if (selectedAgent) params.append("agent", selectedAgent);
       if (selectedValidity) params.append("validity", selectedValidity);
       if (selectedRouter) params.append("router", selectedRouter);
+      if (selectedCamp && selectedCamp !== "all") params.append("camp", selectedCamp);
+      if (selectedSoldType && selectedSoldType !== "all") params.append("soldType", selectedSoldType);
       if (searchQuery) params.append("search", searchQuery);
 
       const res = await fetch(`/api/reports/sales?${params.toString()}`);
@@ -625,14 +642,18 @@ export default function SalesReportDashboard() {
   };
 
   // Fetch Camps list
-  const fetchCamps = async () => {
+  const fetchCamps = async (overrideParams?: { search?: string; sortBy?: string; company?: string }) => {
     if (!isMounted) return;
     setLoadingCamps(true);
     try {
       const params = new URLSearchParams();
-      if (campSearch) params.append("search", campSearch);
-      if (campSortBy) params.append("sortBy", campSortBy);
-      if (campCompanyFilter) params.append("company", campCompanyFilter);
+      const s = overrideParams?.search ?? (activeTab === "camps" ? campSearch : "");
+      const sb = overrideParams?.sortBy ?? (activeTab === "camps" ? campSortBy : "");
+      const c = overrideParams?.company ?? (activeTab === "camps" ? campCompanyFilter : "");
+
+      if (s) params.append("search", s);
+      if (sb) params.append("sortBy", sb);
+      if (c && c !== "all") params.append("company", c);
 
       const res = await fetch(`/api/reports/camps?${params.toString()}`);
       const data = await res.json();
@@ -1194,6 +1215,8 @@ export default function SalesReportDashboard() {
       fetchCamps();
     } else if (activeTab === "voucher-sales") {
       fetchSales(1);
+      fetchCamps();
+      fetchCompanies();
     } else if (activeTab === "monthly-sales") {
       fetchSummary();
       fetchSales(1);
@@ -1238,6 +1261,8 @@ export default function SalesReportDashboard() {
     selectedAgent, 
     selectedValidity, 
     selectedRouter, 
+    selectedCamp,
+    selectedSoldType,
     entriesLimit, 
     reportSortBy, 
     hotspotSortBy, 
@@ -1308,6 +1333,8 @@ export default function SalesReportDashboard() {
     setSelectedAgent("all");
     setSelectedValidity("all");
     setSelectedRouter("all");
+    setSelectedCamp("all");
+    setSelectedSoldType("all");
     setSearchQuery("");
     setEntriesLimit(100);
     setReportSortBy("");
@@ -1390,6 +1417,8 @@ export default function SalesReportDashboard() {
       if (selectedAgent) params.append("agent", selectedAgent);
       if (selectedValidity) params.append("validity", selectedValidity);
       if (selectedRouter) params.append("router", selectedRouter);
+      if (selectedCamp && selectedCamp !== "all") params.append("camp", selectedCamp);
+      if (selectedSoldType && selectedSoldType !== "all") params.append("soldType", selectedSoldType);
       if (searchQuery) params.append("search", searchQuery);
 
       const res = await fetch(`/api/reports/sales?${params.toString()}`);
@@ -1491,6 +1520,64 @@ export default function SalesReportDashboard() {
     if (!salesData?.sales) return [];
     return Array.from(new Set(salesData.sales.map(s => s.routerId || "Direct/System")));
   }, [salesData]);
+
+  // Dynamic list of camps for dropdown filters (combines campsList and API filters.camps)
+  const dynamicCampOptions = useMemo(() => {
+    const names = new Set<string>();
+
+    // 1. From campsList (database camps table)
+    if (Array.isArray(campsList)) {
+      campsList.forEach((camp: any) => {
+        if (!camp) return;
+        const campName = typeof camp === "string" ? camp : camp.name;
+        const companyName = typeof camp === "object" ? camp.company_name : null;
+
+        if (campName && typeof campName === "string" && campName.trim()) {
+          const trimmed = campName.trim();
+          if (selectedRouter === "all" || !selectedRouter) {
+            names.add(trimmed);
+          } else if (
+            companyName === selectedRouter ||
+            (selectedRouter === "1" && companyName === "Apricom DXB")
+          ) {
+            names.add(trimmed);
+          }
+        }
+      });
+    }
+
+    // 2. From salesData filters.camps if available
+    if (salesData?.filters?.camps) {
+      salesData.filters.camps.forEach((c) => {
+        if (c && typeof c === "string" && c.trim()) names.add(c.trim());
+      });
+    }
+
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [campsList, salesData, selectedRouter]);
+
+  // Dynamic list of companies for dropdown filters
+  const dynamicCompanyOptions = useMemo(() => {
+    const names = new Set<string>();
+
+    if (Array.isArray(companiesList)) {
+      companiesList.forEach((c: any) => {
+        const name = typeof c === "string" ? c : c?.name;
+        if (name && typeof name === "string" && name.trim()) names.add(name.trim());
+      });
+    }
+
+    if (salesData?.filters?.companies) {
+      salesData.filters.companies.forEach((c) => {
+        if (c && typeof c === "string" && c.trim()) names.add(c.trim());
+      });
+    }
+
+    // Fallback base companies
+    COMPANIES.forEach((c) => names.add(c));
+
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [companiesList, salesData]);
 
   // Camp sales data for Dashboard Camps Carousel
   const campCarouselItems = useMemo(() => {
@@ -2097,16 +2184,52 @@ export default function SalesReportDashboard() {
                 </div>
               </div>
 
-              {/* Router ID (Company filter equivalent) */}
+              {/* Company filter */}
               <div className="lg:col-span-2">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Company / Router</label>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Company</label>
                 <select 
                   value={selectedRouter}
-                  onChange={(e) => setSelectedRouter(e.target.value)}
+                  onChange={(e) => {
+                    setSelectedRouter(e.target.value);
+                    setSelectedCamp("all");
+                  }}
                   className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 transition-all cursor-pointer"
                 >
-                  <option value="all">-- All Routers --</option>
-                  <option value="1">Apricom DXB</option>
+                  <option value="all">-- All Companies --</option>
+                  {dynamicCompanyOptions.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Camp filter */}
+              <div className="lg:col-span-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Camp</label>
+                <select 
+                  value={selectedCamp}
+                  onChange={(e) => setSelectedCamp(e.target.value)}
+                  className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 transition-all cursor-pointer"
+                >
+                  <option value="all">-- All Camps --</option>
+                  {dynamicCampOptions.map((campName) => (
+                    <option key={campName} value={campName}>
+                      {campName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Sold Type filter (Disabled) */}
+              <div className="lg:col-span-2 opacity-60">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Sold Type</label>
+                <select 
+                  disabled
+                  value="all"
+                  className="w-full bg-slate-100 border border-slate-200 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-400 cursor-not-allowed"
+                >
+                  <option value="all">-- All Types --</option>
+                  <option value="paid">Paid</option>
+                  <option value="free">Free</option>
                 </select>
               </div>
 
@@ -2163,7 +2286,7 @@ export default function SalesReportDashboard() {
               </div>
 
               {/* Search button and Export button */}
-              <div className="lg:col-span-10 flex gap-3 justify-end">
+              <div className="lg:col-span-6 flex gap-3 justify-end">
                 <button 
                   type="submit" 
                   className="bg-[#3958b2] hover:bg-[#2d468f] text-white font-bold px-5 py-2 rounded-lg flex items-center gap-1.5 transition-all shadow-sm text-sm"
@@ -2230,7 +2353,15 @@ export default function SalesReportDashboard() {
                         <td className="px-6 py-3">{record.seller || <span className="text-slate-400 italic">Direct / System</span>}</td>
                         <td className="px-6 py-3 font-mono">{record.mobile || "—"}</td>
                         <td className="px-6 py-3 text-slate-400 font-mono text-[10px]">{record.routerId}</td>
-                        <td className="px-6 py-3 text-right font-black text-slate-800">AED {record.price}</td>
+                        <td className="px-6 py-3 text-right font-black text-slate-800">
+                          {record.price > 0 ? (
+                            `AED ${record.price}`
+                          ) : (
+                            <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded text-[10px] border border-emerald-200">
+                              Free
+                            </span>
+                          )}
+                        </td>
                       </tr>
                     ))
                   ) : (

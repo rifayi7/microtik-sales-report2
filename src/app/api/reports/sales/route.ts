@@ -81,6 +81,28 @@ export async function GET(request: Request) {
     const plansRows = (await db.execute({ sql: plansSql, args: [] })).rows as unknown as { days: number }[];
     const plans = plansRows.map(row => row.days);
 
+    // 6. Get distinct camps dynamically from camps and routers tables
+    const campsSql = `
+      SELECT DISTINCT name FROM (
+        SELECT name FROM camps WHERE name IS NOT NULL AND name != ''
+        UNION
+        SELECT camp as name FROM routers WHERE camp IS NOT NULL AND camp != ''
+      ) ORDER BY name ASC
+    `;
+    const campsRows = (await db.execute({ sql: campsSql, args: [] })).rows as unknown as { name: string }[];
+    const camps = campsRows.map(row => row.name);
+
+    // 7. Get distinct companies dynamically from companies and camps tables
+    const companiesSql = `
+      SELECT DISTINCT name FROM (
+        SELECT name FROM companies WHERE name IS NOT NULL AND name != ''
+        UNION
+        SELECT company_name as name FROM camps WHERE company_name IS NOT NULL AND company_name != ''
+      ) ORDER BY name ASC
+    `;
+    const companiesRows = (await db.execute({ sql: companiesSql, args: [] })).rows as unknown as { name: string }[];
+    const companies = companiesRows.map(row => row.name);
+
     return NextResponse.json({
       success: true,
       sales,
@@ -94,6 +116,8 @@ export async function GET(request: Request) {
         agents,
         routers,
         plans,
+        camps,
+        companies,
       }
     });
   } catch (error) {
