@@ -2604,7 +2604,7 @@ export default function SalesReportDashboard() {
                     <th className="px-6 py-4">Validity</th>
                     <th className="px-6 py-4">Sold By</th>
                     <th className="px-6 py-4">Customer Mobile</th>
-                    <th className="px-6 py-4">Router ID</th>
+                    <th className="px-6 py-4">Camp / Hotspot</th>
                     <th className="px-6 py-4 text-right">Price</th>
                   </tr>
                 </thead>
@@ -2616,29 +2616,56 @@ export default function SalesReportDashboard() {
                       </td>
                     </tr>
                   ) : salesData?.sales && salesData.sales.length > 0 ? (
-                    salesData.sales.map((record) => (
-                      <tr key={record.code} className="hover:bg-slate-50/50 transition-all">
-                        <td className="px-6 py-3 text-slate-500 whitespace-nowrap">{record.timestamp}</td>
-                        <td className="px-6 py-3 font-bold text-[#3958b2]">{record.code}</td>
-                        <td className="px-6 py-3">
-                          <span className="bg-purple-50 text-purple-600 px-2 py-0.5 rounded font-black text-[10px]">
-                            {record.validity} Days
-                          </span>
-                        </td>
-                        <td className="px-6 py-3">{record.seller || <span className="text-slate-400 italic">Direct / System</span>}</td>
-                        <td className="px-6 py-3 font-mono">{record.mobile || "—"}</td>
-                        <td className="px-6 py-3 text-slate-400 font-mono text-[10px]">{record.routerId}</td>
-                        <td className="px-6 py-3 text-right font-black text-slate-800">
-                          {record.price > 0 ? (
-                            `AED ${record.price}`
-                          ) : (
-                            <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded text-[10px] border border-emerald-200">
-                              Free
+                    salesData.sales.map((record) => {
+                      // Format Dubai timestamp (UTC+4)
+                      let formattedTime = record.timestamp;
+                      try {
+                        if (record.timestamp) {
+                          const cleanTs = record.timestamp.replace(" ", "T") + (record.timestamp.endsWith("Z") ? "" : "Z");
+                          const dateObj = new Date(cleanTs);
+                          if (!isNaN(dateObj.getTime())) {
+                            const dubaiTime = new Date(dateObj.getTime() + 4 * 3600 * 1000);
+                            const Y = dubaiTime.getUTCFullYear();
+                            const M = String(dubaiTime.getUTCMonth() + 1).padStart(2, "0");
+                            const D = String(dubaiTime.getUTCDate()).padStart(2, "0");
+                            let h = dubaiTime.getUTCHours();
+                            const m = String(dubaiTime.getUTCMinutes()).padStart(2, "0");
+                            const ampm = h >= 12 ? "PM" : "AM";
+                            h = h % 12 || 12;
+                            const hStr = String(h).padStart(2, "0");
+                            formattedTime = `${D}-${M}-${Y} ${hStr}:${m} ${ampm}`;
+                          }
+                        }
+                      } catch (e) {
+                        formattedTime = record.timestamp;
+                      }
+
+                      return (
+                        <tr key={record.code} className="hover:bg-slate-50/50 transition-all">
+                          <td className="px-6 py-3 text-slate-500 whitespace-nowrap">{formattedTime}</td>
+                          <td className="px-6 py-3 font-bold text-[#3958b2]">{record.code}</td>
+                          <td className="px-6 py-3">
+                            <span className="bg-purple-50 text-purple-600 px-2 py-0.5 rounded font-black text-[10px]">
+                              {record.validity} Days
                             </span>
-                          )}
-                        </td>
-                      </tr>
-                    ))
+                          </td>
+                          <td className="px-6 py-3">{record.seller || <span className="text-slate-400 italic">Direct / System</span>}</td>
+                          <td className="px-6 py-3 font-mono">{record.mobile || "—"}</td>
+                          <td className="px-6 py-3 text-slate-700 font-medium">
+                            {record.campName || record.hotspotName || record.routerId || "—"}
+                          </td>
+                          <td className="px-6 py-3 text-right font-black text-slate-800">
+                            {record.price > 0 ? (
+                              `AED ${record.price}`
+                            ) : (
+                              <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded text-[10px] border border-emerald-200">
+                                Free
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
                   ) : (
                     <tr>
                       <td colSpan={7} className="px-6 py-10 text-center text-slate-400 italic">
