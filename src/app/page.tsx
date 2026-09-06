@@ -144,14 +144,6 @@ interface PricingData {
 
 const COLORS = ["#3958b2", "#26b048", "#ff6228", "#ad27a7", "#862beb", "#35bccc", "#ffbc36"];
 
-const STAFF_LIST = [
-  "Akif", "Bin laden", "binladan", "Cam2", "camp3new", "casmp1", 
-  "iqbalapricom", "kokan", "Mamoolik", "muz2", "Muzain", "Muzain User 1", 
-  "muzain-serc", "muzain3", "muzainsecuri", "rahul", "Rathilal", "Rimal-1", 
-  "saif", "Security YSG 2", "shahid1", "Vishnu Staff", "wenz2", "ysg1", "ysg2"
-];
-
-const COMPANIES = ["Apricom DXB", "Apricom KSA"];
 const EXPENSE_CATEGORIES = ["Office Rent", "Router Purchase", "Fuel / Transportation", "Internet bill", "Salary", "Other / General"];
 const COMMON_CATEGORIES = ["Office Equipment", "Office Stationeries", "Repairs & Maintenance", "Team Outings"];
 const SUPPLIERS = ["Landlord Ltd", "Supplier XYZ", "Hardware Supplier A", "Gas Station", "Telcom Co"];
@@ -1668,17 +1660,21 @@ export default function SalesReportDashboard() {
       });
     }
 
+    if (Array.isArray(campsList)) {
+      campsList.forEach((camp: any) => {
+        const cComp = typeof camp === "object" ? camp.company_name : null;
+        if (cComp && typeof cComp === "string" && cComp.trim()) names.add(cComp.trim());
+      });
+    }
+
     if (salesData?.filters?.companies) {
       salesData.filters.companies.forEach((c) => {
         if (c && typeof c === "string" && c.trim()) names.add(c.trim());
       });
     }
 
-    // Fallback base companies
-    COMPANIES.forEach((c) => names.add(c));
-
     return Array.from(names).sort((a, b) => a.localeCompare(b));
-  }, [companiesList, salesData, userType, companyName]);
+  }, [companiesList, campsList, salesData, userType, companyName]);
 
   // Unique list of camps found in the current loaded sales log
   const campList = useMemo(() => {
@@ -1701,10 +1697,7 @@ export default function SalesReportDashboard() {
           const trimmed = cName.trim();
           if (selectedRouter === "all" || !selectedRouter) {
             names.add(trimmed);
-          } else if (
-            compName === selectedRouter ||
-            (selectedRouter === "1" && compName === "Apricom DXB")
-          ) {
+          } else if (compName === selectedRouter) {
             names.add(trimmed);
           }
         }
@@ -1820,22 +1813,10 @@ export default function SalesReportDashboard() {
           agents.add(vs.name.trim());
         }
       });
-
-      // Also fallback to API filters.agents or summaryData.agents
-      if (salesData?.filters?.agents) {
-        salesData.filters.agents.forEach((a) => {
-          if (a && typeof a === "string" && a.trim()) agents.add(a.trim());
-        });
-      }
-      if (agents.size === 0 && summaryData?.agents) {
-        summaryData.agents.forEach((a) => {
-          if (a?.name && typeof a.name === "string" && a.name.trim()) agents.add(a.name.trim());
-        });
-      }
     }
 
     return Array.from(agents).sort((a, b) => a.localeCompare(b));
-  }, [salesData, summaryData, selectedCamp, selectedRouter, userType, allowedCamps, companyName]);
+  }, [salesData, selectedCamp, selectedRouter, userType, allowedCamps, companyName]);
 
   const agentOptions = dynamicAgentOptions;
 
@@ -1849,21 +1830,13 @@ export default function SalesReportDashboard() {
         if (sp.display_name && sp.display_name.trim()) staff.add(sp.display_name.trim());
       });
     }
-    if (salesData?.filters?.agents) {
-      salesData.filters.agents.forEach((a) => {
-        if (a && typeof a === "string" && a.trim()) staff.add(a.trim());
+    if (salesData?.filters?.voucherSellers) {
+      salesData.filters.voucherSellers.forEach((vs: any) => {
+        if (vs.name && vs.name.trim()) staff.add(vs.name.trim());
       });
-    }
-    if (summaryData?.agents) {
-      summaryData.agents.forEach((a) => {
-        if (a?.name && typeof a.name === "string" && a.name.trim()) staff.add(a.name.trim());
-      });
-    }
-    if (staff.size === 0) {
-      STAFF_LIST.forEach((s) => staff.add(s));
     }
     return Array.from(staff).sort((a, b) => a.localeCompare(b));
-  }, [salesData, summaryData, loggedInUser]);
+  }, [salesData, loggedInUser]);
 
   // Camp sales data for Dashboard Today's Camps Sales Carousel
   const campCarouselItems = useMemo(() => {
@@ -3606,7 +3579,7 @@ export default function SalesReportDashboard() {
                   className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 cursor-pointer"
                 >
                   <option value="all">-- All Companies --</option>
-                  {COMPANIES.map(c => (
+                  {dynamicCompanyOptions.map(c => (
                     <option key={c} value={c}>{c}</option>
                   ))}
                   <option value="common">Common (No Company)</option>
@@ -4334,7 +4307,7 @@ export default function SalesReportDashboard() {
                     onChange={(e) => setRegExpense(prev => ({ ...prev, company_name: e.target.value }))}
                     className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2.5 rounded-lg text-sm outline-none text-slate-800"
                   >
-                    {COMPANIES.map(c => (
+                    {dynamicCompanyOptions.map(c => (
                       <option key={c} value={c}>{c}</option>
                     ))}
                   </select>
