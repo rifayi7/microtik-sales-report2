@@ -158,6 +158,8 @@ export async function GET(request: Request) {
     let todayRevenue = 0;
     let yesterdaySales = 0;
     let yesterdayRevenue = 0;
+    let thisMonthSalesCount = 0;
+    let thisMonthSalesRevenue = 0;
     let lastMonthSalesCount = 0;
     let lastMonthSalesRevenue = 0;
     let lastMonthCollectionCount = 0;
@@ -189,8 +191,29 @@ export async function GET(request: Request) {
       yesterdaySales = yesterdayStats?.count || 0;
       yesterdayRevenue = yesterdayStats?.revenue || 0;
 
-      // Real Dynamic Last Month Sales and Collections Calculation
+      // Real Dynamic This Month Sales Calculation
       const now = new Date();
+      const thisMonthYear = now.getFullYear();
+      const thisMonthNum = String(now.getMonth() + 1).padStart(2, "0");
+      const thisMonthYearMonth = `${thisMonthYear}-${thisMonthNum}`;
+      const thisMonthStart = `${thisMonthYearMonth}-01 00:00:00`;
+      const lastDayOfCurrentMonth = new Date(thisMonthYear, now.getMonth() + 1, 0).getDate();
+      const thisMonthEnd = `${thisMonthYearMonth}-${String(lastDayOfCurrentMonth).padStart(2, "0")} 23:59:59`;
+
+      const thisMonthSalesSql = `
+        SELECT COUNT(*) as count, SUM(COALESCE(v.price_charged, 0)) as revenue
+        FROM vouchers v
+        WHERE v.status = 'redeemed' AND v.used_at >= ? AND v.used_at <= ? ${campScopeSql}
+      `;
+      const thisMonthSalesRow = (await db.execute({ sql: thisMonthSalesSql, args: [thisMonthStart, thisMonthEnd, ...campScopeArgs] })).rows[0] as unknown as {
+        count: number;
+        revenue: number | null;
+      };
+
+      thisMonthSalesCount = thisMonthSalesRow?.count || 0;
+      thisMonthSalesRevenue = thisMonthSalesRow?.revenue || 0;
+
+      // Real Dynamic Last Month Sales and Collections Calculation
       const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
       const lastMonthYear = lastMonthDate.getFullYear();
       const lastMonthNum = String(lastMonthDate.getMonth() + 1).padStart(2, "0");
@@ -274,6 +297,10 @@ export async function GET(request: Request) {
           camps: finalTodayCamps || []
         },
         yesterday: { sales: yesterdaySales, revenue: yesterdayRevenue },
+        thisMonth: {
+          sales: thisMonthSalesCount || 0,
+          revenue: thisMonthSalesRevenue || 0,
+        },
       },
       lastMonth: {
         sales: {

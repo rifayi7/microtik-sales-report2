@@ -83,6 +83,7 @@ interface SummaryData {
       camps?: { campName: string; count: number; revenue: number }[];
     };
     yesterday: { sales: number; revenue: number };
+    thisMonth?: { sales: number; revenue: number };
   };
   lastMonth?: {
     sales: { count: number; revenue: number };
@@ -3814,16 +3815,20 @@ export default function SalesReportDashboard() {
                   <div className="py-2.5 flex-1 flex flex-col justify-center gap-1.5">
                     <div>
                       <span className="text-[10px] opacity-75 font-semibold uppercase block">Amount</span>
-                      <span className="text-xl font-black">AED {summaryData?.summary.totalRevenue || 0}</span>
+                      <span className="text-xl font-black">
+                        AED {Number(summaryData?.comparison?.thisMonth?.revenue ?? summaryData?.summary?.totalRevenue ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
                     </div>
                     <div>
                       <span className="text-[10px] opacity-75 font-semibold uppercase block">Count</span>
-                      <span className="text-base font-bold">{summaryData?.summary.totalSales || 0} vouchers</span>
+                      <span className="text-base font-bold">
+                        {Number(summaryData?.comparison?.thisMonth?.sales ?? summaryData?.summary?.totalSales ?? 0).toLocaleString()} vouchers
+                      </span>
                     </div>
                   </div>
 
                   <div className="text-[9px] font-bold opacity-80">
-                    Last Update: Today's Sync
+                    Last Update: This Month Sync
                   </div>
                 </div>
 
