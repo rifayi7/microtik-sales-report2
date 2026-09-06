@@ -96,10 +96,31 @@ export async function GET(request: Request) {
       revenue: number;
     }[];
 
+    // 6. Get Sales Performance by Company
+    const companySql = `
+      SELECT 
+        COALESCE(NULLIF(c.company_name, ''), NULLIF(comp.name, ''), 'Default Company') as companyName, 
+        COUNT(*) as salesCount, 
+        SUM(COALESCE(v.price_charged, 0)) as revenue 
+      FROM vouchers v
+      LEFT JOIN routers r ON (CAST(r.id AS TEXT) = CAST(v.router_id AS TEXT) OR r.sessionName = v.router_id)
+      LEFT JOIN camps c ON (v.router_id = c.name OR CAST(v.router_id AS TEXT) = CAST(c.id AS TEXT) OR v.router_id = c.hotspot_name OR r.camp = c.name)
+      LEFT JOIN companies comp ON (c.company_name = comp.name)
+      ${whereClause}
+      GROUP BY companyName
+      ORDER BY revenue DESC
+    `;
+    const companiesRes = (await db.execute({ sql: companySql, args: [...params] })).rows as unknown as {
+      companyName: string;
+      salesCount: number;
+      revenue: number;
+    }[];
+
     let finalAgents = agents;
     let finalPlans = plans;
     let finalTrends = trends;
     let finalCamps = camps;
+    let finalCompanies = companiesRes || [];
     
     // Build base camp scoping for sub-queries
     const userType = url.searchParams.get("userType");
@@ -266,6 +287,7 @@ export async function GET(request: Request) {
       },
       agents: finalAgents,
       camps: finalCamps,
+      companies: finalCompanies,
       plans: finalPlans,
       trends: finalTrends,
     });

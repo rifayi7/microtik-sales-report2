@@ -25,6 +25,7 @@ import {
   Trash2,
   Edit,
   Building2,
+  BarChart3,
   X
 } from "lucide-react";
 import { 
@@ -89,6 +90,7 @@ interface SummaryData {
   };
   agents: { name: string; salesCount: number; revenue: number }[];
   camps?: { campName: string; salesCount: number; revenue: number }[];
+  companies?: { companyName: string; salesCount: number; revenue: number }[];
   plans: { planName: string; count: number; revenue: number }[];
   trends: { date: string; sales: number; revenue: number }[];
 }
@@ -152,6 +154,9 @@ export default function SalesReportDashboard() {
   const [selectedSoldType, setSelectedSoldType] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [entriesLimit, setEntriesLimit] = useState(100);
+  
+  // Dashboard Monthly Analysis Specific States
+  const [dashboardAnalysisMonth, setDashboardAnalysisMonth] = useState("");
   
   // Tab 2: Monthly Voucher Sales Specific States
   const [selectedMonth, setSelectedMonth] = useState("2026-08");
@@ -328,6 +333,8 @@ export default function SalesReportDashboard() {
     };
 
     const todayStr = formatDate(now);
+    const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    setDashboardAnalysisMonth(currentYearMonth);
     setStartDate(formatDate(firstDay));
     setEndDate(todayStr);
     
@@ -3574,59 +3581,105 @@ export default function SalesReportDashboard() {
             {/* Middle Row Section: Agent Analysis (Left) & Slideshow stats (Right) */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-2">
               
-              {/* Left Panel: Agent - Monthly Sales Analysis (5 cols) */}
-              <div className="lg:col-span-5 bg-white border border-[#cfdbe6] rounded-xl p-5 shadow-sm flex flex-col">
-                <div className="flex justify-between items-center pb-3 mb-4 border-b border-slate-100">
-                  <h4 className="text-sm font-black text-slate-700 uppercase tracking-wider">
-                    Agent - Monthly Sales Analysis
-                  </h4>
-                  <div className="text-xs text-slate-500 font-bold bg-slate-100 px-2 py-1 rounded">
-                    {startDate.substring(5, 7) || "08"}-{startDate.substring(0, 4) || "2026"}
+              {/* Left Panel: Company - Monthly Sales Analysis (5 cols) */}
+              <div className="lg:col-span-5 bg-white border border-[#cfdbe6] rounded-xl p-5 shadow-sm flex flex-col justify-between">
+                <div className="flex justify-between items-center pb-3 mb-3 border-b border-slate-100 gap-2">
+                  <div className="flex items-center gap-2">
+                    <Building2 className="h-4.5 w-4.5 text-[#3958b2]" />
+                    <h4 className="text-xs sm:text-sm font-black text-slate-700 uppercase tracking-wider">
+                      Company - Monthly Sales Analysis
+                    </h4>
+                  </div>
+                  
+                  {/* Dynamic Month Selector */}
+                  <div className="relative">
+                    <input 
+                      type="month" 
+                      value={dashboardAnalysisMonth || `${startDate.substring(0, 7)}`}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setDashboardAnalysisMonth(val);
+                        if (val) {
+                          const [year, month] = val.split("-");
+                          const firstDay = `${year}-${month}-01`;
+                          const lastDay = new Date(Number(year), Number(month), 0).getDate();
+                          const lastDayStr = `${year}-${month}-${String(lastDay).padStart(2, "0")}`;
+                          setStartDate(firstDay);
+                          setEndDate(lastDayStr);
+                        }
+                      }}
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 font-bold text-[11px] px-2 py-1 rounded-md outline-none cursor-pointer transition-all shadow-xs"
+                    />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-12 text-[10px] font-black text-slate-400 uppercase tracking-widest pb-2 border-b border-slate-100">
-                  <div className="col-span-5">Agent</div>
-                  <div className="col-span-3 text-right">Prev Count</div>
-                  <div className="col-span-2 text-right">Sales</div>
-                  <div className="col-span-2 text-right">Amount</div>
+                {/* Table Header */}
+                <div className="grid grid-cols-12 text-[10px] font-black text-slate-400 uppercase tracking-widest pb-2 border-b border-slate-100 items-center">
+                  <div className="col-span-4 flex items-center gap-1">
+                    <span>Company</span>
+                  </div>
+                  <div className="col-span-2 text-right">Prev Count</div>
+                  <div className="col-span-2 text-right">Sales Count</div>
+                  <div className="col-span-3 text-right">Sale Amount</div>
+                  <div className="col-span-1 text-center" title="Statistics">Stats</div>
                 </div>
 
+                {/* Table Records Body */}
                 <div className="flex-1 divide-y divide-slate-100 max-h-[220px] overflow-y-auto pr-1">
                   {loadingSummary ? (
                     <div className="py-10 text-center">
                       <RefreshCw className="h-5 w-5 animate-spin text-slate-400 mx-auto" />
                     </div>
-                  ) : summaryData?.agents && summaryData.agents.length > 0 ? (
-                    summaryData.agents.map((agent) => (
+                  ) : summaryData?.companies && summaryData.companies.length > 0 ? (
+                    summaryData.companies.map((comp) => (
                       <div 
-                        key={agent.name} 
+                        key={comp.companyName} 
                         onClick={() => {
-                          setSelectedAgent(agent.name);
                           setActiveTab("voucher-sales");
                         }}
                         className="grid grid-cols-12 items-center py-2.5 hover:bg-slate-50 rounded-lg px-1 transition-all cursor-pointer text-xs"
                       >
-                        <div className="col-span-5 font-bold text-slate-700 flex items-center gap-2">
-                          <span className="w-2.5 h-2.5 rounded-full bg-[#3958b2]/20 text-[#3958b2] flex items-center justify-center font-bold text-[8px]">
-                            A
+                        <div className="col-span-4 font-bold text-slate-700 flex items-center gap-1.5 truncate">
+                          <span className="w-2.5 h-2.5 rounded-full bg-[#3958b2]/20 text-[#3958b2] flex items-center justify-center font-bold text-[8px] shrink-0">
+                            C
                           </span>
-                          <span className="truncate">{agent.name}</span>
+                          <span className="truncate" title={comp.companyName}>{comp.companyName}</span>
                         </div>
-                        <div className="col-span-3 text-right font-semibold text-slate-400">
-                          {Math.round(agent.salesCount * 0.9) || 0}
+                        
+                        {/* Previous Count */}
+                        <div className="col-span-2 text-right font-semibold text-slate-400 text-[11px]">
+                          {Math.round(comp.salesCount * 0.9) || 0}
                         </div>
-                        <div className="col-span-2 text-right font-extrabold text-slate-600">
-                          {agent.salesCount}
+                        
+                        {/* Sales Count */}
+                        <div className="col-span-2 text-right font-extrabold text-slate-700 text-[11px]">
+                          {comp.salesCount}
                         </div>
-                        <div className="col-span-2 text-right font-black text-[#3958b2]">
-                          AED {agent.revenue}
+                        
+                        {/* Sale Amount */}
+                        <div className="col-span-3 text-right font-black text-[#3958b2] text-[11px] truncate">
+                          AED {comp.revenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                        
+                        {/* Static Icon to show later statistics of sales */}
+                        <div className="col-span-1 flex justify-center items-center">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveTab("sales-chart");
+                            }}
+                            className="p-1 text-slate-400 hover:text-[#3958b2] hover:bg-[#3958b2]/10 rounded transition-all"
+                            title="View Sales Statistics"
+                          >
+                            <BarChart3 className="h-3.5 w-3.5" />
+                          </button>
                         </div>
                       </div>
                     ))
                   ) : (
                     <div className="py-10 text-center text-slate-400 text-xs italic">
-                      No agent records to display.
+                      No company records to display for this month.
                     </div>
                   )}
                 </div>
