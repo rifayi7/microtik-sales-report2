@@ -1677,49 +1677,67 @@ export default function SalesReportDashboard() {
 
   // Aggregate sales data by Month and Camp for Camps - Monthly Voucher Sales Chart
   const { campChartData, activeCampsInChart } = useMemo(() => {
-    if (!salesData?.sales || salesData.sales.length === 0) {
-      return { campChartData: [], activeCampsInChart: [] };
-    }
-
     const maxDay = Number(endDayRange) || 31;
     const allCampsSet = new Set<string>();
     const monthGroups: Record<string, { month: string; order: string; Total: number; [key: string]: any }> = {};
 
-    salesData.sales.forEach((sale) => {
-      if (!sale.timestamp) return;
-      const cleanTs = sale.timestamp.replace(" ", "T") + (sale.timestamp.endsWith("Z") ? "" : "Z");
-      const d = new Date(cleanTs);
-      if (isNaN(d.getTime())) return;
+    // 1. Pre-populate all requested months in the window based on startMonthDay and noOfMonths
+    const d = startMonthDay ? new Date(startMonthDay) : new Date();
+    const monthsCount = Math.max(1, Number(noOfMonths) || 3);
+    const sYear = !isNaN(d.getFullYear()) ? d.getFullYear() : new Date().getFullYear();
+    const sMonth = !isNaN(d.getMonth()) ? d.getMonth() : new Date().getMonth();
+    const monthShortNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-      // Dubai time (UTC+4)
-      const dubai = new Date(d.getTime() + 4 * 3600 * 1000);
-      const dayNum = dubai.getUTCDate();
-      
-      // Filter by end day range (e.g. day 1 to endDayRange)
-      if (dayNum > maxDay) return;
+    for (let i = monthsCount - 1; i >= 0; i--) {
+      const targetDate = new Date(sYear, sMonth - i, 1);
+      const y = targetDate.getFullYear();
+      const mIdx = targetDate.getMonth();
+      const orderKey = `${y}-${String(mIdx + 1).padStart(2, "0")}`;
+      const rangeStr = maxDay < 31 ? `01-${maxDay}` : "01-31";
+      const label = `${y} ${monthShortNames[mIdx]}, ${rangeStr}`;
 
-      const year = dubai.getUTCFullYear();
-      const monthIdx = dubai.getUTCMonth();
-      const monthShortNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-      const monthName = monthShortNames[monthIdx];
-      const rangeStr = `01-${maxDay}`;
-      const label = `${year} ${monthName}, ${rangeStr}`;
-      const orderKey = `${year}-${String(monthIdx + 1).padStart(2, "0")}`;
+      monthGroups[orderKey] = {
+        month: label,
+        order: orderKey,
+        Total: 0
+      };
+    }
 
-      const resolvedCamp = (sale.campName || sale.routerId || "Other").trim();
-      allCampsSet.add(resolvedCamp);
+    // 2. Populate sales into month groups
+    if (salesData?.sales && salesData.sales.length > 0) {
+      salesData.sales.forEach((sale) => {
+        if (!sale.timestamp) return;
+        const cleanTs = sale.timestamp.replace(" ", "T") + (sale.timestamp.endsWith("Z") ? "" : "Z");
+        const dateObj = new Date(cleanTs);
+        if (isNaN(dateObj.getTime())) return;
 
-      if (!monthGroups[orderKey]) {
-        monthGroups[orderKey] = {
-          month: label,
-          order: orderKey,
-          Total: 0
-        };
+        // Dubai time (UTC+4)
+        const dubai = new Date(dateObj.getTime() + 4 * 3600 * 1000);
+        const dayNum = dubai.getUTCDate();
+        
+        // Filter by end day range (e.g. day 1 to endDayRange)
+        if (dayNum > maxDay) return;
+
+        const year = dubai.getUTCFullYear();
+        const monthIdx = dubai.getUTCMonth();
+        const orderKey = `${year}-${String(monthIdx + 1).padStart(2, "0")}`;
+
+        const resolvedCamp = (sale.campName || sale.routerId || "Other").trim();
+        allCampsSet.add(resolvedCamp);
+
+        if (monthGroups[orderKey]) {
+          monthGroups[orderKey][resolvedCamp] = (monthGroups[orderKey][resolvedCamp] || 0) + Number(sale.price || 0);
+          monthGroups[orderKey].Total += Number(sale.price || 0);
+        }
+      });
+    }
+
+    // Fallback if no sales data yet, add allowed camps or camps from campsList
+    if (allCampsSet.size === 0) {
+      if (allowedCamps.length > 0) {
+        allowedCamps.forEach(c => allCampsSet.add(c));
       }
-
-      monthGroups[orderKey][resolvedCamp] = (monthGroups[orderKey][resolvedCamp] || 0) + Number(sale.price || 0);
-      monthGroups[orderKey].Total += Number(sale.price || 0);
-    });
+    }
 
     const activeCamps = Array.from(allCampsSet);
     const sortedData = Object.values(monthGroups)
@@ -1732,7 +1750,7 @@ export default function SalesReportDashboard() {
       });
 
     return { campChartData: sortedData, activeCampsInChart: activeCamps };
-  }, [salesData, endDayRange]);
+  }, [salesData, endDayRange, startMonthDay, noOfMonths, allowedCamps]);
 
   // Dynamic variables definition
   const campColors = COLORS;
