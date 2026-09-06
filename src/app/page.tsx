@@ -3832,42 +3832,39 @@ export default function SalesReportDashboard() {
                   </div>
                 </div>
 
-                {/* 3. Last Month Sale & Collection (Full width across md grid columns - 2 columns span) */}
-                <div className="md:col-span-2 bg-gradient-to-br from-[#35bccc] to-[#3958b2] text-white rounded-xl p-5 shadow-md flex flex-col relative overflow-hidden group">
-                  <div className="absolute -right-3 -bottom-5 opacity-10">
+                {/* 3. Last Month Sale (Full width across md grid columns - 2 columns span) */}
+                <div className="md:col-span-2 bg-gradient-to-br from-[#35bccc] to-[#3958b2] text-white rounded-xl p-5 shadow-md flex flex-col justify-between relative overflow-hidden group min-h-[160px]">
+                  <div className="absolute -right-3 -bottom-5 opacity-10 group-hover:scale-110 transition-transform duration-300 pointer-events-none">
                     <Layers className="h-28 w-28 text-white" />
                   </div>
 
-                  <div className="grid grid-cols-2 divide-x divide-white/25">
-                    {/* Left block: Last Month Sale */}
-                    <div className="pr-4 py-1.5">
-                      <span className="text-xs font-black uppercase tracking-wider opacity-85 block mb-2">Last Month Sale</span>
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="text-xs opacity-75">AED</span>
-                        <span className="text-xl font-black">
-                          {Number(summaryData?.lastMonth?.sales?.revenue || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                      <div className="text-xs font-semibold mt-1.5">
-                        Count: <span className="font-bold">{summaryData?.lastMonth?.sales?.count || 0} vouchers</span>
-                      </div>
-                      <div className="text-[9px] opacity-75 mt-3 font-bold">Updated: Last Month Database Sync</div>
+                  <div className="text-xs uppercase font-bold tracking-widest opacity-85 pb-2 border-b border-white/20 flex justify-between items-center z-10">
+                    <div className="flex items-center gap-1.5">
+                      <Layers className="h-4 w-4" />
+                      <span>Last Month Sale</span>
                     </div>
+                    <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full font-bold">
+                      Previous Month
+                    </span>
+                  </div>
 
-                    {/* Right block: Last Month Collection */}
-                    <div className="pl-6 py-1.5">
-                      <span className="text-xs font-black uppercase tracking-wider opacity-85 block mb-2">Last Month Collection</span>
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="text-xs opacity-75">AED</span>
-                        <span className="text-xl font-black">
-                          {Number(summaryData?.lastMonth?.collection?.revenue || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                      <div className="text-xs font-semibold mt-1.5">
-                        Count: <span className="font-bold">{summaryData?.lastMonth?.collection?.count || 0} payments</span>
-                      </div>
-                      <div className="text-[9px] opacity-75 mt-3 font-bold">Updated: Verified Payments</div>
+                  <div className="py-2.5 flex-1 flex flex-col justify-center gap-1.5 z-10">
+                    <div>
+                      <span className="text-[10px] opacity-75 font-semibold uppercase block">Sale Amount</span>
+                      <span className="text-2xl font-black tracking-tight">
+                        AED {Number(summaryData?.lastMonth?.sales?.revenue || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
                     </div>
+                    <div>
+                      <span className="text-[10px] opacity-75 font-semibold uppercase block">Sale Count</span>
+                      <span className="text-base font-bold">
+                        {Number(summaryData?.lastMonth?.sales?.count || 0).toLocaleString()} vouchers
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="text-[9px] font-bold opacity-80 z-10">
+                    Updated: Last Month Database Sync
                   </div>
                 </div>
 
