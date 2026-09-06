@@ -167,11 +167,19 @@ export default function SalesReportDashboard() {
   const [dashboardAnalysisMonth, setDashboardAnalysisMonth] = useState("");
   
   // Tab 2: Monthly Voucher Sales Specific States
-  const [selectedMonth, setSelectedMonth] = useState("2026-08");
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const now = new Date();
+    const dubai = new Date(now.getTime() + 4 * 3600 * 1000);
+    return `${dubai.getUTCFullYear()}-${String(dubai.getUTCMonth() + 1).padStart(2, "0")}`;
+  });
 
   // Tab 3: Voucher Sales Chart Specific States
-  const [startMonthDay, setStartMonthDay] = useState("2026-08-05");
-  const [endDayRange, setEndDayRange] = useState("11");
+  const [startMonthDay, setStartMonthDay] = useState(() => {
+    const now = new Date();
+    const dubai = new Date(now.getTime() + 4 * 3600 * 1000);
+    return `${dubai.getUTCFullYear()}-${String(dubai.getUTCMonth() + 1).padStart(2, "0")}-${String(dubai.getUTCDate()).padStart(2, "0")}`;
+  });
+  const [endDayRange, setEndDayRange] = useState("31");
   const [noOfMonths, setNoOfMonths] = useState(3);
   const [isStacked, setIsStacked] = useState(false);
 
@@ -540,6 +548,18 @@ export default function SalesReportDashboard() {
         params.append("startDate", mStart);
         params.append("endDate", mEnd);
         if (selectedCamp && selectedCamp !== "all") params.append("camp", selectedCamp);
+      } else if (activeTab === "sales-chart" && startMonthDay) {
+        const d = new Date(startMonthDay);
+        const monthsCount = Math.max(1, Number(noOfMonths) || 1);
+        const sYear = d.getFullYear();
+        const sMonth = d.getMonth();
+        const startTarget = new Date(sYear, sMonth - (monthsCount - 1), 1);
+        const startStr = `${startTarget.getFullYear()}-${String(startTarget.getMonth() + 1).padStart(2, "0")}-01`;
+        const endLastDay = new Date(sYear, sMonth + 1, 0).getDate();
+        const endStr = `${sYear}-${String(sMonth + 1).padStart(2, "0")}-${String(endLastDay).padStart(2, "0")}`;
+        params.append("startDate", startStr);
+        params.append("endDate", endStr);
+        if (selectedCamp && selectedCamp !== "all") params.append("camp", selectedCamp);
       } else {
         if (startDate) params.append("startDate", startDate);
         if (endDate) params.append("endDate", endDate);
@@ -585,6 +605,17 @@ export default function SalesReportDashboard() {
         const mEnd = `${mYear}-${mMonth}-${String(lastDay).padStart(2, "0")}`;
         params.append("startDate", mStart);
         params.append("endDate", mEnd);
+      } else if (activeTab === "sales-chart" && startMonthDay) {
+        const d = new Date(startMonthDay);
+        const monthsCount = Math.max(1, Number(noOfMonths) || 1);
+        const sYear = d.getFullYear();
+        const sMonth = d.getMonth();
+        const startTarget = new Date(sYear, sMonth - (monthsCount - 1), 1);
+        const startStr = `${startTarget.getFullYear()}-${String(startTarget.getMonth() + 1).padStart(2, "0")}-01`;
+        const endLastDay = new Date(sYear, sMonth + 1, 0).getDate();
+        const endStr = `${sYear}-${String(sMonth + 1).padStart(2, "0")}-${String(endLastDay).padStart(2, "0")}`;
+        params.append("startDate", startStr);
+        params.append("endDate", endStr);
       } else {
         if (startDate) params.append("startDate", startDate);
         if (endDate) params.append("endDate", endDate);
@@ -1401,6 +1432,11 @@ export default function SalesReportDashboard() {
     expenseSearch,
     expenseCompanyFilter,
     expenseCategoryFilter,
+    selectedMonth,
+    startMonthDay,
+    endDayRange,
+    noOfMonths,
+    isStacked,
     userType,
     companyId,
     allowedCamps,
