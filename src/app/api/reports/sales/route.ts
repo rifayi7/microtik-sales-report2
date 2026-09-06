@@ -12,6 +12,8 @@ interface SalesRecord {
   seller: string | null;
   routerId: string;
   price: number;
+  campName?: string;
+  hotspotName?: string;
 }
 
 export async function GET(request: Request) {
@@ -43,8 +45,12 @@ export async function GET(request: Request) {
         v.used_at as timestamp, 
         v.sold_by as seller, 
         v.router_id as routerId,
-        COALESCE(v.price_charged, 0) as price
+        COALESCE(v.price_charged, 0) as price,
+        COALESCE(NULLIF(r.camp, ''), NULLIF(r.sessionName, ''), NULLIF(c.name, ''), NULLIF(v.router_id, '')) as campName,
+        COALESCE(NULLIF(r.hotspotName, ''), NULLIF(c.hotspot_name, ''), NULLIF(r.camp, ''), NULLIF(c.name, ''), NULLIF(v.router_id, '')) as hotspotName
       FROM vouchers v
+      LEFT JOIN routers r ON (CAST(r.id AS TEXT) = CAST(v.router_id AS TEXT) OR r.sessionName = v.router_id)
+      LEFT JOIN camps c ON (v.router_id = c.name OR CAST(v.router_id AS TEXT) = CAST(c.id AS TEXT) OR v.router_id = c.hotspot_name OR r.camp = c.name)
       ${whereClause}
       ORDER BY v.used_at DESC
       LIMIT ? OFFSET ?

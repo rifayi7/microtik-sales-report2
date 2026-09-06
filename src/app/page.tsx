@@ -104,6 +104,8 @@ interface SalesRecord {
   seller: string | null;
   routerId: string;
   price: number;
+  campName?: string;
+  hotspotName?: string;
 }
 
 interface SalesData {
@@ -332,6 +334,7 @@ export default function SalesReportDashboard() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [changingPassword, setChangingPassword] = useState(false);
+  const [lastLoginTime, setLastLoginTime] = useState("");
 
   // Initialize dates and session: default to current month & restore session
   useEffect(() => {
@@ -351,6 +354,10 @@ export default function SalesReportDashboard() {
     setDashboardAnalysisMonth(currentYearMonth);
     setStartDate(formatDate(firstDay));
     setEndDate(todayStr);
+
+    const dateStr = now.toLocaleDateString("en-US", { month: "long", day: "2-digit", year: "numeric" });
+    const timeStr = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true }).toLowerCase();
+    setLastLoginTime(`${dateStr} ${timeStr}`);
     
     setRegExpense(prev => ({ ...prev, expense_date: todayStr }));
     setCommExpense(prev => ({ ...prev, expense_date: todayStr }));
@@ -1496,7 +1503,8 @@ export default function SalesReportDashboard() {
     setEditPriceMap(prev => ({ ...prev, [days]: "0" }));
   };
 
-  // Export to CSV
+  // Export to Excel / CSV matching the exact template:
+  // Mobile, Voucher, Amount, Validity, Camp, Hotspot, End date, SoldType, PaymentType, sold By, Sold Date
   const handleExportCSV = async () => {
     setLoadingSales(true);
     try {
@@ -1504,34 +1512,75 @@ export default function SalesReportDashboard() {
       params.append("limit", "100000"); 
       if (startDate) params.append("startDate", startDate);
       if (endDate) params.append("endDate", endDate);
-      if (selectedAgent) params.append("agent", selectedAgent);
-      if (selectedValidity) params.append("validity", selectedValidity);
-      if (selectedRouter) params.append("router", selectedRouter);
+      if (selectedAgent && selectedAgent !== "all") params.append("agent", selectedAgent);
+      if (selectedValidity && selectedValidity !== "all") params.append("validity", selectedValidity);
+      if (selectedRouter && selectedRouter !== "all") params.append("router", selectedRouter);
       if (selectedCamp && selectedCamp !== "all") params.append("camp", selectedCamp);
       if (selectedSoldType && selectedSoldType !== "all") params.append("soldType", selectedSoldType);
       if (searchQuery) params.append("search", searchQuery);
+      if (userType) params.append("userType", userType);
+      if (userType === "report_user") {
+        params.append("allowedCamps", JSON.stringify(allowedCamps));
+      }
 
       const res = await fetch(`/api/reports/sales?${params.toString()}`);
       const data = await res.json();
-      if (data.success && data.sales.length > 0) {
-        const headers = ["Date & Time", "Voucher Code", "Validity (Days)", "Sold By (Agent)", "Customer Mobile", "Router ID", "Price"];
-        const rows = data.sales.map((item: SalesRecord) => [
-          item.timestamp,
-          item.code,
-          item.validity,
-          item.seller || "Direct/System",
-          item.mobile,
-          item.routerId,
-          item.price
-        ]);
+      if (data.success && data.sales && data.sales.length > 0) {
+        const headers = ["Mobile", "Voucher", "Amount", "Validity", "Camp", "Hotspot", "End date", "SoldType", "PaymentType", "sold By", "Sold Date"];
+        
+        const formatExcelDates = (ts: string, validityDays: number) => {
+          if (!ts) return { soldDateStr: "", endDateStr: "" };
+          const cleanTs = ts.replace(" ", "T") + (ts.endsWith("Z") ? "" : "Z");
+          const dateObj = new Date(cleanTs);
+          if (isNaN(dateObj.getTime())) return { soldDateStr: ts, endDateStr: "" };
+          
+          // UTC+4 for Dubai
+          const dubaiTime = new Date(dateObj.getTime() + 4 * 3600 * 1000);
+          const Y = dubaiTime.getUTCFullYear();
+          const M = String(dubaiTime.getUTCMonth() + 1).padStart(2, "0");
+          const D = String(dubaiTime.getUTCDate()).padStart(2, "0");
+          
+          let h = dubaiTime.getUTCHours();
+          const m = String(dubaiTime.getUTCMinutes()).padStart(2, "0");
+          const ampm = h >= 12 ? "PM" : "AM";
+          h = h % 12 || 12;
+          const hStr = String(h).padStart(2, "0");
+          
+          const soldDateStr = `${D}-${M}-${Y} ${hStr}:${m} ${ampm}`;
+          
+          const endD = new Date(Date.UTC(Y, dubaiTime.getUTCMonth(), dubaiTime.getUTCDate() + Number(validityDays || 0)));
+          const eY = endD.getUTCFullYear();
+          const eM = String(endD.getUTCMonth() + 1).padStart(2, "0");
+          const eD = String(endD.getUTCDate()).padStart(2, "0");
+          const endDateStr = `${eY}-${eM}-${eD}`;
+          
+          return { soldDateStr, endDateStr };
+        };
 
-        const csvContent = "data:text/csv;charset=utf-8," 
-          + [headers.join(","), ...rows.map((r: any[]) => r.map(val => `"${val}"`).join(","))].join("\n");
+        const rows = data.sales.map((item: SalesRecord) => {
+          const { soldDateStr, endDateStr } = formatExcelDates(item.timestamp, item.validity);
+          return [
+            item.mobile || "",
+            item.code || "",
+            item.price ?? 0,
+            `${item.validity}-Days`,
+            item.campName || item.routerId || "",
+            item.hotspotName || item.campName || item.routerId || "",
+            endDateStr,
+            "P",
+            "Cash",
+            item.seller || "",
+            soldDateStr
+          ];
+        });
+
+        const csvContent = "data:text/csv;charset=utf-8,\uFEFF" 
+          + [headers.join(","), ...rows.map((r: any[]) => r.map(val => `"${String(val).replace(/"/g, '""')}"`).join(","))].join("\n");
         
         const encodedUri = encodeURI(csvContent);
         const link = document.createElement("a");
         link.setAttribute("href", encodedUri);
-        link.setAttribute("download", `Sales_Report_${startDate}_to_${endDate}.csv`);
+        link.setAttribute("download", `Sales_Report_${startDate || "all"}_to_${endDate || "all"}.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -1789,6 +1838,32 @@ export default function SalesReportDashboard() {
   }, [salesData, summaryData, selectedCamp, selectedRouter, userType, allowedCamps, companyName]);
 
   const agentOptions = dynamicAgentOptions;
+
+  // Dynamic list of staff members for Expense logging
+  const dynamicStaffList = useMemo(() => {
+    const staff = new Set<string>();
+    if (loggedInUser && loggedInUser !== "admin") staff.add(loggedInUser);
+    if (salesData?.filters?.allSalesPersons) {
+      salesData.filters.allSalesPersons.forEach((sp: any) => {
+        if (sp.username && sp.username.trim()) staff.add(sp.username.trim());
+        if (sp.display_name && sp.display_name.trim()) staff.add(sp.display_name.trim());
+      });
+    }
+    if (salesData?.filters?.agents) {
+      salesData.filters.agents.forEach((a) => {
+        if (a && typeof a === "string" && a.trim()) staff.add(a.trim());
+      });
+    }
+    if (summaryData?.agents) {
+      summaryData.agents.forEach((a) => {
+        if (a?.name && typeof a.name === "string" && a.name.trim()) staff.add(a.name.trim());
+      });
+    }
+    if (staff.size === 0) {
+      STAFF_LIST.forEach((s) => staff.add(s));
+    }
+    return Array.from(staff).sort((a, b) => a.localeCompare(b));
+  }, [salesData, summaryData, loggedInUser]);
 
   // Camp sales data for Dashboard Today's Camps Sales Carousel
   const campCarouselItems = useMemo(() => {
@@ -2393,7 +2468,7 @@ export default function SalesReportDashboard() {
             {activeTab === "pricing" && "Pricing Settings"}
           </h3>
           <div className="text-xs sm:text-sm text-slate-600 font-medium">
-            Last Login: <span className="text-[#3958b2] font-bold">August 09, 2026 11:47 am</span>
+            Last Login: <span className="text-[#3958b2] font-bold">{lastLoginTime || "August 09, 2026 11:47 am"}</span>
           </div>
         </div>
 
@@ -4298,7 +4373,7 @@ export default function SalesReportDashboard() {
                     onChange={(e) => setRegExpense(prev => ({ ...prev, expense_by: e.target.value }))}
                     className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2.5 rounded-lg text-sm outline-none text-slate-800"
                   >
-                    {STAFF_LIST.map(st => (
+                    {dynamicStaffList.map(st => (
                       <option key={st} value={st}>{st}</option>
                     ))}
                   </select>
@@ -4411,7 +4486,7 @@ export default function SalesReportDashboard() {
                     onChange={(e) => setCommExpense(prev => ({ ...prev, expense_by: e.target.value }))}
                     className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2.5 rounded-lg text-sm outline-none text-slate-800"
                   >
-                    {STAFF_LIST.map(st => (
+                    {dynamicStaffList.map(st => (
                       <option key={st} value={st}>{st}</option>
                     ))}
                   </select>
