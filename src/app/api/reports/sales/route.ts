@@ -51,7 +51,41 @@ export async function GET(request: Request) {
     `;
     const sales = (await db.execute({ sql: salesSql, args: [...params, limit, offset] })).rows as unknown as SalesRecord[];
 
-    // 3. Get distinct list of agents for dropdown filter
+    // 3. Get list of all sales persons from sales_persons table
+    let allSalesPersons: any[] = [];
+    try {
+      const spRes = await db.execute({
+        sql: "SELECT id, username, display_name, camp_name, allowed_camps, company_name FROM sales_persons",
+        args: []
+      });
+      allSalesPersons = spRes.rows;
+    } catch (e) {
+      allSalesPersons = [];
+    }
+
+    // 4. Get voucher sellers with camp and company association
+    let voucherSellers: any[] = [];
+    try {
+      const vsRes = await db.execute({
+        sql: `
+          SELECT DISTINCT 
+            v.sold_by as name, 
+            COALESCE(NULLIF(r.camp, ''), NULLIF(r.sessionName, ''), NULLIF(c.name, ''), NULLIF(v.router_id, '')) as camp_name,
+            COALESCE(NULLIF(c.company_name, ''), NULLIF(comp.name, '')) as company_name
+          FROM vouchers v
+          LEFT JOIN routers r ON (CAST(r.id AS TEXT) = CAST(v.router_id AS TEXT) OR r.sessionName = v.router_id)
+          LEFT JOIN camps c ON (v.router_id = c.name OR CAST(v.router_id AS TEXT) = CAST(c.id AS TEXT) OR v.router_id = c.hotspot_name OR r.camp = c.name)
+          LEFT JOIN companies comp ON (c.company_name = comp.name)
+          WHERE v.status = 'redeemed' AND v.sold_by IS NOT NULL AND v.sold_by != ''
+        `,
+        args: []
+      });
+      voucherSellers = vsRes.rows;
+    } catch (e) {
+      voucherSellers = [];
+    }
+
+    // 5. Get distinct list of agents for dropdown filter
     const agentsSql = `
       SELECT DISTINCT sold_by as name 
       FROM vouchers 
@@ -61,7 +95,7 @@ export async function GET(request: Request) {
     const agentsRows = (await db.execute({ sql: agentsSql, args: [] })).rows as unknown as { name: string }[];
     const agents = agentsRows.map(row => row.name);
 
-    // 4. Get distinct list of routers for dropdown filter
+    // 6. Get distinct list of routers for dropdown filter
     const routersSql = `
       SELECT DISTINCT router_id as id 
       FROM vouchers 
@@ -71,7 +105,7 @@ export async function GET(request: Request) {
     const routersRows = (await db.execute({ sql: routersSql, args: [] })).rows as unknown as { id: string }[];
     const routers = routersRows.map(row => row.id);
 
-    // 5. Get distinct validity periods
+    // 7. Get distinct validity periods
     const plansSql = `
       SELECT DISTINCT validity_days as days 
       FROM vouchers 
@@ -81,7 +115,7 @@ export async function GET(request: Request) {
     const plansRows = (await db.execute({ sql: plansSql, args: [] })).rows as unknown as { days: number }[];
     const plans = plansRows.map(row => row.days);
 
-    // 6. Get distinct camps dynamically from camps and routers tables
+    // 8. Get distinct camps dynamically from camps and routers tables
     const campsSql = `
       SELECT DISTINCT name FROM (
         SELECT name FROM camps WHERE name IS NOT NULL AND name != ''
@@ -92,7 +126,7 @@ export async function GET(request: Request) {
     const campsRows = (await db.execute({ sql: campsSql, args: [] })).rows as unknown as { name: string }[];
     const camps = campsRows.map(row => row.name);
 
-    // 7. Get distinct companies dynamically from companies and camps tables
+    // 9. Get distinct companies dynamically from companies and camps tables
     const companiesSql = `
       SELECT DISTINCT name FROM (
         SELECT name FROM companies WHERE name IS NOT NULL AND name != ''
@@ -118,6 +152,8 @@ export async function GET(request: Request) {
         plans,
         camps,
         companies,
+        allSalesPersons,
+        voucherSellers,
       }
     });
   } catch (error) {

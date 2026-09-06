@@ -120,6 +120,19 @@ interface SalesData {
     plans: number[];
     camps?: string[];
     companies?: string[];
+    allSalesPersons?: {
+      id?: number;
+      username: string;
+      display_name: string | null;
+      camp_name: string | null;
+      allowed_camps: string | null;
+      company_name: string | null;
+    }[];
+    voucherSellers?: {
+      name: string;
+      camp_name: string | null;
+      company_name: string | null;
+    }[];
   };
 }
 
@@ -1588,53 +1601,15 @@ export default function SalesReportDashboard() {
 
   // Dynamic variables definition
   const campColors = COLORS;
-  const agentOptions = salesData?.filters?.agents || [];
   const planOptions = salesData?.filters?.plans || [];
   const carouselItems = summaryData?.agents.slice(0, 5) || [];
 
-  // Unique list of camps found in the current loaded sales log
-  const campList = useMemo(() => {
-    if (!salesData?.sales) return [];
-    return Array.from(new Set(salesData.sales.map(s => s.routerId || "Direct/System")));
-  }, [salesData]);
-
-  // Dynamic list of camps for dropdown filters (combines campsList and API filters.camps)
-  const dynamicCampOptions = useMemo(() => {
-    const names = new Set<string>();
-
-    // 1. From campsList (database camps table)
-    if (Array.isArray(campsList)) {
-      campsList.forEach((camp: any) => {
-        if (!camp) return;
-        const campName = typeof camp === "string" ? camp : camp.name;
-        const companyName = typeof camp === "object" ? camp.company_name : null;
-
-        if (campName && typeof campName === "string" && campName.trim()) {
-          const trimmed = campName.trim();
-          if (selectedRouter === "all" || !selectedRouter) {
-            names.add(trimmed);
-          } else if (
-            companyName === selectedRouter ||
-            (selectedRouter === "1" && companyName === "Apricom DXB")
-          ) {
-            names.add(trimmed);
-          }
-        }
-      });
-    }
-
-    // 2. From salesData filters.camps if available
-    if (salesData?.filters?.camps) {
-      salesData.filters.camps.forEach((c) => {
-        if (c && typeof c === "string" && c.trim()) names.add(c.trim());
-      });
-    }
-
-    return Array.from(names).sort((a, b) => a.localeCompare(b));
-  }, [campsList, salesData, selectedRouter]);
-
   // Dynamic list of companies for dropdown filters
   const dynamicCompanyOptions = useMemo(() => {
+    if (userType === "report_user" && companyName) {
+      return [companyName];
+    }
+
     const names = new Set<string>();
 
     if (Array.isArray(companiesList)) {
@@ -1654,7 +1629,166 @@ export default function SalesReportDashboard() {
     COMPANIES.forEach((c) => names.add(c));
 
     return Array.from(names).sort((a, b) => a.localeCompare(b));
-  }, [companiesList, salesData]);
+  }, [companiesList, salesData, userType, companyName]);
+
+  // Unique list of camps found in the current loaded sales log
+  const campList = useMemo(() => {
+    if (!salesData?.sales) return [];
+    return Array.from(new Set(salesData.sales.map(s => s.routerId || "Direct/System")));
+  }, [salesData]);
+
+  // Dynamic list of camps for dropdown filters (combines campsList and API filters.camps)
+  const dynamicCampOptions = useMemo(() => {
+    const names = new Set<string>();
+
+    // 1. From campsList (database camps table)
+    if (Array.isArray(campsList)) {
+      campsList.forEach((camp: any) => {
+        if (!camp) return;
+        const cName = typeof camp === "string" ? camp : camp.name;
+        const compName = typeof camp === "object" ? camp.company_name : null;
+
+        if (cName && typeof cName === "string" && cName.trim()) {
+          const trimmed = cName.trim();
+          if (selectedRouter === "all" || !selectedRouter) {
+            names.add(trimmed);
+          } else if (
+            compName === selectedRouter ||
+            (selectedRouter === "1" && compName === "Apricom DXB")
+          ) {
+            names.add(trimmed);
+          }
+        }
+      });
+    }
+
+    // 2. From salesData filters.camps if available
+    if (salesData?.filters?.camps) {
+      salesData.filters.camps.forEach((c) => {
+        if (c && typeof c === "string" && c.trim()) names.add(c.trim());
+      });
+    }
+
+    let result = Array.from(names);
+
+    // If report_user, strictly restrict to allowedCamps
+    if (userType === "report_user") {
+      if (allowedCamps && allowedCamps.length > 0) {
+        result = result.filter((c) => allowedCamps.includes(c));
+      } else {
+        result = [];
+      }
+    }
+
+    return result.sort((a, b) => a.localeCompare(b));
+  }, [campsList, salesData, selectedRouter, userType, allowedCamps]);
+
+  // Dynamic list of agents/sellers for dropdown filter
+  const dynamicAgentOptions = useMemo(() => {
+    const agents = new Set<string>();
+
+    const allSalesPersons = salesData?.filters?.allSalesPersons || [];
+    const voucherSellers = salesData?.filters?.voucherSellers || [];
+
+    // Helper to check if a sales person belongs to a camp
+    const spMatchesCamp = (sp: any, campName: string) => {
+      if (!sp) return false;
+      if (sp.camp_name === campName || sp.camp_name === "All Camps") return true;
+      if (sp.allowed_camps) {
+        try {
+          const parsed = typeof sp.allowed_camps === "string" ? JSON.parse(sp.allowed_camps) : sp.allowed_camps;
+          if (Array.isArray(parsed) && parsed.includes(campName)) return true;
+        } catch {
+          if (String(sp.allowed_camps).includes(campName)) return true;
+        }
+      }
+      return false;
+    };
+
+    // Helper to check if a sales person belongs to user's scope
+    const spMatchesScope = (sp: any) => {
+      if (!sp) return false;
+      if (userType === "report_user") {
+        if (allowedCamps && allowedCamps.length > 0) {
+          return allowedCamps.some((c) => spMatchesCamp(sp, c));
+        }
+        if (companyName && sp.company_name === companyName) return true;
+        return false;
+      }
+      if (selectedRouter && selectedRouter !== "all") {
+        return sp.company_name === selectedRouter;
+      }
+      return true;
+    };
+
+    // Helper for voucher seller matching camp
+    const vsMatchesCamp = (vs: any, campName: string) => {
+      if (!vs) return false;
+      return vs.camp_name === campName;
+    };
+
+    // Helper for voucher seller matching user scope
+    const vsMatchesScope = (vs: any) => {
+      if (!vs) return false;
+      if (userType === "report_user") {
+        if (allowedCamps && allowedCamps.length > 0) {
+          return allowedCamps.some((c) => vsMatchesCamp(vs, c));
+        }
+        if (companyName && vs.company_name === companyName) return true;
+        return false;
+      }
+      if (selectedRouter && selectedRouter !== "all") {
+        return vs.company_name === selectedRouter;
+      }
+      return true;
+    };
+
+    if (selectedCamp !== "all") {
+      // Specific camp is selected -> show ONLY sales persons assigned to that camp
+      allSalesPersons.forEach((sp: any) => {
+        if (spMatchesCamp(sp, selectedCamp)) {
+          if (sp.username && sp.username.trim()) agents.add(sp.username.trim());
+          if (sp.display_name && sp.display_name.trim()) agents.add(sp.display_name.trim());
+        }
+      });
+
+      voucherSellers.forEach((vs: any) => {
+        if (vsMatchesCamp(vs, selectedCamp) && vs.name && vs.name.trim()) {
+          agents.add(vs.name.trim());
+        }
+      });
+    } else {
+      // All camps selected -> show all sales persons in allowed camps / company
+      allSalesPersons.forEach((sp: any) => {
+        if (spMatchesScope(sp)) {
+          if (sp.username && sp.username.trim()) agents.add(sp.username.trim());
+          if (sp.display_name && sp.display_name.trim()) agents.add(sp.display_name.trim());
+        }
+      });
+
+      voucherSellers.forEach((vs: any) => {
+        if (vsMatchesScope(vs) && vs.name && vs.name.trim()) {
+          agents.add(vs.name.trim());
+        }
+      });
+
+      // Also fallback to API filters.agents or summaryData.agents
+      if (salesData?.filters?.agents) {
+        salesData.filters.agents.forEach((a) => {
+          if (a && typeof a === "string" && a.trim()) agents.add(a.trim());
+        });
+      }
+      if (agents.size === 0 && summaryData?.agents) {
+        summaryData.agents.forEach((a) => {
+          if (a?.name && typeof a.name === "string" && a.name.trim()) agents.add(a.name.trim());
+        });
+      }
+    }
+
+    return Array.from(agents).sort((a, b) => a.localeCompare(b));
+  }, [salesData, summaryData, selectedCamp, selectedRouter, userType, allowedCamps, companyName]);
+
+  const agentOptions = dynamicAgentOptions;
 
   // Camp sales data for Dashboard Today's Camps Sales Carousel
   const campCarouselItems = useMemo(() => {
@@ -2312,14 +2446,16 @@ export default function SalesReportDashboard() {
               <div className="lg:col-span-2">
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Company</label>
                 <select 
-                  value={selectedRouter}
+                  value={userType === "report_user" && companyName ? companyName : selectedRouter}
+                  disabled={userType === "report_user" && Boolean(companyName)}
                   onChange={(e) => {
                     setSelectedRouter(e.target.value);
                     setSelectedCamp("all");
+                    setSelectedAgent("all");
                   }}
-                  className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 transition-all cursor-pointer"
+                  className={`w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 transition-all ${userType === "report_user" && companyName ? "bg-slate-100 cursor-not-allowed text-slate-700" : "cursor-pointer"}`}
                 >
-                  <option value="all">-- All Companies --</option>
+                  {userType !== "report_user" && <option value="all">-- All Companies --</option>}
                   {dynamicCompanyOptions.map((c) => (
                     <option key={c} value={c}>{c}</option>
                   ))}
@@ -2331,7 +2467,10 @@ export default function SalesReportDashboard() {
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Camp</label>
                 <select 
                   value={selectedCamp}
-                  onChange={(e) => setSelectedCamp(e.target.value)}
+                  onChange={(e) => {
+                    setSelectedCamp(e.target.value);
+                    setSelectedAgent("all");
+                  }}
                   className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 transition-all cursor-pointer"
                 >
                   <option value="all">-- All Camps --</option>
@@ -2384,11 +2523,8 @@ export default function SalesReportDashboard() {
                   className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 transition-all cursor-pointer"
                 >
                   <option value="all">-- All Users --</option>
-                  {agentOptions.map(agent => (
+                  {dynamicAgentOptions.map((agent) => (
                     <option key={agent} value={agent}>{agent}</option>
-                  ))}
-                  {agentOptions.length === 0 && summaryData?.agents.map(a => (
-                    <option key={a.name} value={a.name}>{a.name}</option>
                   ))}
                 </select>
               </div>
