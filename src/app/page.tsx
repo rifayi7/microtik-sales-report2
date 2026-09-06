@@ -201,6 +201,7 @@ export default function SalesReportDashboard() {
   // Tab 8: Users Sale Report Specific States
   const [userSaleData, setUserSaleData] = useState<any[]>([]);
   const [loadingUserSale, setLoadingUserSale] = useState(false);
+  const [salesPersonsList, setSalesPersonsList] = useState<any[]>([]);
 
   // Tab 9: Companies Master Specific States
   const [companiesList, setCompaniesList] = useState<any[]>([]);
@@ -373,7 +374,7 @@ export default function SalesReportDashboard() {
       console.warn("Session restore error:", e);
     }
 
-    // Dynamically load camps and companies on initial mount
+    // Dynamically load camps, companies, and sales persons on initial mount
     fetch("/api/reports/camps")
       .then(res => res.json())
       .then(d => { if (d.success && Array.isArray(d.data)) setCampsList(d.data); })
@@ -382,6 +383,11 @@ export default function SalesReportDashboard() {
     fetch("/api/reports/companies")
       .then(res => res.json())
       .then(d => { if (d.success && Array.isArray(d.data)) setCompaniesList(d.data); })
+      .catch(console.error);
+
+    fetch("/api/reports/sales-persons")
+      .then(res => res.json())
+      .then(d => { if (d.success && Array.isArray(d.data)) setSalesPersonsList(d.data); })
       .catch(console.error);
   }, []);
 
@@ -1729,94 +1735,81 @@ export default function SalesReportDashboard() {
   const dynamicAgentOptions = useMemo(() => {
     const agents = new Set<string>();
 
-    const allSalesPersons = salesData?.filters?.allSalesPersons || [];
+    // Combine salesPersonsList state and salesData.filters.allSalesPersons
+    const spSource = salesPersonsList.length > 0 ? salesPersonsList : (salesData?.filters?.allSalesPersons || []);
     const voucherSellers = salesData?.filters?.voucherSellers || [];
 
-    // Helper to check if a sales person belongs to a camp
+    // Determine active company
+    const activeCompany = (userType === "report_user" && companyName)
+      ? companyName
+      : (selectedRouter !== "all" ? selectedRouter : "");
+
+    // Helper to check if a salesperson belongs to the active company
+    const spMatchesCompany = (sp: any) => {
+      if (!activeCompany) return true;
+      const spComp = (sp.companyName || sp.company_name || "").trim().toLowerCase();
+      return spComp === activeCompany.toLowerCase();
+    };
+
+    // Helper to check if a salesperson has access to a specific camp
     const spMatchesCamp = (sp: any, campName: string) => {
-      if (!sp) return false;
-      if (sp.camp_name === campName || sp.camp_name === "All Camps") return true;
-      if (sp.allowed_camps) {
+      if (!spMatchesCompany(sp)) return false;
+      if (!campName || campName === "all") return true;
+
+      const directCamp = (sp.campName || sp.camp_name || "").trim();
+      if (directCamp === campName || directCamp === "All Camps") return true;
+
+      let allowed: string[] = [];
+      const rawAllowed = sp.allowedCamps || sp.allowed_camps;
+      if (Array.isArray(rawAllowed)) {
+        allowed = rawAllowed;
+      } else if (rawAllowed) {
         try {
-          const parsed = typeof sp.allowed_camps === "string" ? JSON.parse(sp.allowed_camps) : sp.allowed_camps;
-          if (Array.isArray(parsed) && parsed.includes(campName)) return true;
+          const parsed = JSON.parse(rawAllowed);
+          allowed = Array.isArray(parsed) ? parsed : [String(rawAllowed)];
         } catch {
-          if (String(sp.allowed_camps).includes(campName)) return true;
+          allowed = [String(rawAllowed)];
         }
       }
-      return false;
+      return allowed.map(c => String(c).trim()).includes(campName);
     };
 
-    // Helper to check if a sales person belongs to user's scope
-    const spMatchesScope = (sp: any) => {
-      if (!sp) return false;
-      if (userType === "report_user") {
-        if (allowedCamps && allowedCamps.length > 0) {
-          return allowedCamps.some((c) => spMatchesCamp(sp, c));
-        }
-        if (companyName && sp.company_name === companyName) return true;
-        return false;
-      }
-      if (selectedRouter && selectedRouter !== "all") {
-        return sp.company_name === selectedRouter;
-      }
-      return true;
-    };
-
-    // Helper for voucher seller matching camp
-    const vsMatchesCamp = (vs: any, campName: string) => {
-      if (!vs) return false;
-      return vs.camp_name === campName;
-    };
-
-    // Helper for voucher seller matching user scope
-    const vsMatchesScope = (vs: any) => {
-      if (!vs) return false;
-      if (userType === "report_user") {
-        if (allowedCamps && allowedCamps.length > 0) {
-          return allowedCamps.some((c) => vsMatchesCamp(vs, c));
-        }
-        if (companyName && vs.company_name === companyName) return true;
-        return false;
-      }
-      if (selectedRouter && selectedRouter !== "all") {
-        return vs.company_name === selectedRouter;
-      }
-      return true;
-    };
-
-    if (selectedCamp !== "all") {
-      // Specific camp is selected -> show ONLY sales persons assigned to that camp
-      allSalesPersons.forEach((sp: any) => {
+    // Add salespersons based on Company and Camp selection
+    spSource.forEach((sp: any) => {
+      if (selectedCamp !== "all") {
         if (spMatchesCamp(sp, selectedCamp)) {
-          if (sp.username && sp.username.trim()) agents.add(sp.username.trim());
-          if (sp.display_name && sp.display_name.trim()) agents.add(sp.display_name.trim());
+          if (sp.displayName && sp.displayName.trim()) agents.add(sp.displayName.trim());
+          else if (sp.display_name && sp.display_name.trim()) agents.add(sp.display_name.trim());
+          else if (sp.username && sp.username.trim()) agents.add(sp.username.trim());
         }
-      });
+      } else {
+        if (spMatchesCompany(sp)) {
+          if (sp.displayName && sp.displayName.trim()) agents.add(sp.displayName.trim());
+          else if (sp.display_name && sp.display_name.trim()) agents.add(sp.display_name.trim());
+          else if (sp.username && sp.username.trim()) agents.add(sp.username.trim());
+        }
+      }
+    });
 
-      voucherSellers.forEach((vs: any) => {
-        if (vsMatchesCamp(vs, selectedCamp) && vs.name && vs.name.trim()) {
+    // Also include any matching voucher sellers for that camp/company
+    voucherSellers.forEach((vs: any) => {
+      const vsComp = (vs.company_name || "").trim().toLowerCase();
+      const vsCamp = (vs.camp_name || "").trim();
+      if (activeCompany && vsComp && vsComp !== activeCompany.toLowerCase()) return;
+
+      if (selectedCamp !== "all") {
+        if (vsCamp === selectedCamp && vs.name && vs.name.trim()) {
           agents.add(vs.name.trim());
         }
-      });
-    } else {
-      // All camps selected -> show all sales persons in allowed camps / company
-      allSalesPersons.forEach((sp: any) => {
-        if (spMatchesScope(sp)) {
-          if (sp.username && sp.username.trim()) agents.add(sp.username.trim());
-          if (sp.display_name && sp.display_name.trim()) agents.add(sp.display_name.trim());
-        }
-      });
-
-      voucherSellers.forEach((vs: any) => {
-        if (vsMatchesScope(vs) && vs.name && vs.name.trim()) {
+      } else {
+        if (vs.name && vs.name.trim()) {
           agents.add(vs.name.trim());
         }
-      });
-    }
+      }
+    });
 
     return Array.from(agents).sort((a, b) => a.localeCompare(b));
-  }, [salesData, selectedCamp, selectedRouter, userType, allowedCamps, companyName]);
+  }, [salesPersonsList, salesData, selectedCamp, selectedRouter, userType, companyName]);
 
   const agentOptions = dynamicAgentOptions;
 

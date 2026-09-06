@@ -35,8 +35,14 @@ export function buildWhereClause(searchParams: URLSearchParams): {
   }
 
   if (agent && agent !== "all" && agent !== "") {
-    conditions.push("v.sold_by = ?");
-    params.push(agent);
+    conditions.push(`(
+      v.sold_by = ? 
+      OR v.sold_by IN (SELECT username FROM sales_persons WHERE username = ? OR display_name = ?)
+      OR v.sold_by IN (SELECT display_name FROM sales_persons WHERE username = ? OR display_name = ?)
+      OR v.sales_person_id IN (SELECT id FROM sales_persons WHERE username = ? OR display_name = ?)
+      OR v.sold_by LIKE ?
+    )`);
+    params.push(agent, agent, agent, agent, agent, agent, agent, `%${agent}%`);
   }
 
   if (validity && validity !== "all" && validity !== "") {
