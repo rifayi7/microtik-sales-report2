@@ -1636,38 +1636,67 @@ export default function SalesReportDashboard() {
     return { count, revenue };
   }, [monthlyDailyTrends]);
 
-  // Aggregate sales data by Month and Camp (Router ID) for Camps - Monthly Voucher Sales Chart
-  const campChartData = useMemo(() => {
-    if (!salesData?.sales) return [];
-    
-    const routers = Array.from(new Set(salesData.sales.map(s => s.routerId || "Direct/System")));
-    const groups: Record<string, any> = {};
-    
-    salesData.sales.forEach(sale => {
-      let monthKey = "Unknown";
-      if (sale.timestamp.includes("-")) {
-        const parts = sale.timestamp.split(" ")[0].split("-");
-        if (parts.length === 3) {
-          if (parts[0].length === 4) {
-            monthKey = `${parts[0]}-${parts[1]}`;
-          } else {
-            monthKey = `${parts[2]}-${parts[1]}`;
-          }
-        }
-      }
+  // Colors for camps in Camps - Monthly Voucher Sales Chart matching image
+  const CHART_CAMP_COLORS = ["#2f65cb", "#d32f2f", "#f59e0b", "#8b5cf6", "#06b6d4", "#ec4899", "#10b981", "#6366f1"];
+
+  // Aggregate sales data by Month and Camp for Camps - Monthly Voucher Sales Chart
+  const { campChartData, activeCampsInChart } = useMemo(() => {
+    if (!salesData?.sales || salesData.sales.length === 0) {
+      return { campChartData: [], activeCampsInChart: [] };
+    }
+
+    const maxDay = Number(endDayRange) || 31;
+    const allCampsSet = new Set<string>();
+    const monthGroups: Record<string, { month: string; order: string; Total: number; [key: string]: any }> = {};
+
+    salesData.sales.forEach((sale) => {
+      if (!sale.timestamp) return;
+      const cleanTs = sale.timestamp.replace(" ", "T") + (sale.timestamp.endsWith("Z") ? "" : "Z");
+      const d = new Date(cleanTs);
+      if (isNaN(d.getTime())) return;
+
+      // Dubai time (UTC+4)
+      const dubai = new Date(d.getTime() + 4 * 3600 * 1000);
+      const dayNum = dubai.getUTCDate();
       
-      if (!groups[monthKey]) {
-        groups[monthKey] = { month: monthKey, Total: 0 };
-        routers.forEach(r => { groups[monthKey][r] = 0; });
+      // Filter by end day range (e.g. day 1 to endDayRange)
+      if (dayNum > maxDay) return;
+
+      const year = dubai.getUTCFullYear();
+      const monthIdx = dubai.getUTCMonth();
+      const monthShortNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const monthName = monthShortNames[monthIdx];
+      const rangeStr = `01-${maxDay}`;
+      const label = `${year} ${monthName}, ${rangeStr}`;
+      const orderKey = `${year}-${String(monthIdx + 1).padStart(2, "0")}`;
+
+      const resolvedCamp = (sale.campName || sale.routerId || "Other").trim();
+      allCampsSet.add(resolvedCamp);
+
+      if (!monthGroups[orderKey]) {
+        monthGroups[orderKey] = {
+          month: label,
+          order: orderKey,
+          Total: 0
+        };
       }
-      
-      const rId = sale.routerId || "Direct/System";
-      groups[monthKey][rId] = (groups[monthKey][rId] || 0) + sale.price;
-      groups[monthKey].Total += sale.price;
+
+      monthGroups[orderKey][resolvedCamp] = (monthGroups[orderKey][resolvedCamp] || 0) + Number(sale.price || 0);
+      monthGroups[orderKey].Total += Number(sale.price || 0);
     });
-    
-    return Object.values(groups).sort((a: any, b: any) => a.month.localeCompare(b.month));
-  }, [salesData]);
+
+    const activeCamps = Array.from(allCampsSet);
+    const sortedData = Object.values(monthGroups)
+      .sort((a, b) => a.order.localeCompare(b.order))
+      .map(item => {
+        activeCamps.forEach(c => {
+          if (item[c] === undefined) item[c] = 0;
+        });
+        return item;
+      });
+
+    return { campChartData: sortedData, activeCampsInChart: activeCamps };
+  }, [salesData, endDayRange]);
 
   // Dynamic variables definition
   const campColors = COLORS;
@@ -2873,91 +2902,219 @@ export default function SalesReportDashboard() {
           </div>
         )}
 
-        {/* ── 3. FILTER BAR (Voucher Sales Chart - Option 3) ──────────────── */}
+        {/* ── 3. FILTER BAR & CONTENT (Camps - Monthly Voucher Sales) ──── */}
         {activeTab === "sales-chart" && (
-          <section className="bg-white border border-[#cfdbe6] rounded-xl p-5 mb-6 shadow-sm">
-            <form onSubmit={handleSearchSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4 items-end">
-              
-              {/* Start Month and Day */}
-              <div className="lg:col-span-3">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Start Month & Day</label>
-                <div className="relative">
-                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <div className="space-y-5 flex-1 flex flex-col">
+            
+            {/* Top Page Header Title + Last Login */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+              <h2 className="text-2xl font-bold text-slate-800 tracking-tight">
+                Camps - Monthly Voucher Sales
+              </h2>
+              <div className="text-xs text-slate-500 font-medium">
+                Last Login: <span className="font-bold text-[#0073b7]">September 06, 2026 10:51 pm</span>
+              </div>
+            </div>
+
+            {/* Filter Bar Card */}
+            <section className="bg-white border border-[#cfdbe6] rounded-xl p-4 shadow-sm">
+              <form onSubmit={handleSearchSubmit} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-12 gap-3 items-end">
+                
+                {/* Start Month and Day */}
+                <div className="lg:col-span-2">
+                  <label className="text-xs font-semibold text-slate-500 block mb-1">Start Month & Day</label>
+                  <div className="relative">
+                    <input 
+                      type="date" 
+                      value={startMonthDay}
+                      onChange={(e) => setStartMonthDay(e.target.value)}
+                      className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#0073b7] focus:ring-1 focus:ring-[#0073b7]/50 px-3 py-1.5 rounded-lg text-xs font-semibold outline-none text-slate-800 transition-all cursor-pointer"
+                    />
+                  </div>
+                </div>
+
+                {/* End Day Range */}
+                <div className="lg:col-span-2">
+                  <label className="text-xs font-semibold text-slate-500 block mb-1">End Day Range</label>
+                  <select 
+                    value={endDayRange}
+                    onChange={(e) => setEndDayRange(e.target.value)}
+                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#0073b7] focus:ring-1 focus:ring-[#0073b7]/50 px-3 py-1.5 rounded-lg text-xs font-semibold outline-none text-slate-800 transition-all cursor-pointer"
+                  >
+                    {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
+                      <option key={day} value={day}>{day}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* No. of Months */}
+                <div className="lg:col-span-1">
+                  <label className="text-xs font-semibold text-slate-500 block mb-1">No. of Months</label>
                   <input 
-                    type="date" 
-                    value={startMonthDay}
-                    onChange={(e) => setStartMonthDay(e.target.value)}
-                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 pl-10 pr-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 transition-all"
+                    type="number" 
+                    value={noOfMonths}
+                    onChange={(e) => setNoOfMonths(Number(e.target.value))}
+                    min={1} 
+                    max={36}
+                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#0073b7] focus:ring-1 focus:ring-[#0073b7]/50 px-3 py-1.5 rounded-lg text-xs font-semibold outline-none text-slate-800 transition-all"
                   />
                 </div>
-              </div>
 
-              {/* End Day Range */}
-              <div className="lg:col-span-2">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">End Day Range</label>
-                <select 
-                  value={endDayRange}
-                  onChange={(e) => setEndDayRange(e.target.value)}
-                  className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 transition-all cursor-pointer"
-                >
-                  {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
-                    <option key={day} value={day}>{day}</option>
-                  ))}
-                </select>
-              </div>
+                {/* Company filter */}
+                <div className="lg:col-span-2">
+                  <label className="text-xs font-semibold text-slate-500 block mb-1">Company</label>
+                  <select 
+                    value={userType === "report_user" && companyName ? companyName : selectedRouter}
+                    disabled={userType === "report_user" && Boolean(companyName)}
+                    onChange={(e) => {
+                      setSelectedRouter(e.target.value);
+                      setSelectedCamp("all");
+                    }}
+                    className={`w-full bg-[#f8fafc] border border-slate-300 focus:border-[#0073b7] focus:ring-1 focus:ring-[#0073b7]/50 px-3 py-1.5 rounded-lg text-xs font-semibold outline-none text-slate-800 transition-all ${userType === "report_user" && companyName ? "bg-slate-100 cursor-not-allowed" : "cursor-pointer"}`}
+                  >
+                    {userType !== "report_user" && (
+                      <option value="all">-- All Companies ({dynamicCompanyOptions.length}) --</option>
+                    )}
+                    {dynamicCompanyOptions.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
 
-              {/* No. of Months */}
-              <div className="lg:col-span-2">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">No. of Months</label>
-                <input 
-                  type="number" 
-                  value={noOfMonths}
-                  onChange={(e) => setNoOfMonths(Number(e.target.value))}
-                  min={1} 
-                  max={36}
-                  className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 transition-all"
-                />
-              </div>
+                {/* Camp filter */}
+                <div className="lg:col-span-2">
+                  <label className="text-xs font-semibold text-slate-500 block mb-1">Camp</label>
+                  <select 
+                    value={selectedCamp}
+                    onChange={(e) => setSelectedCamp(e.target.value)}
+                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#0073b7] focus:ring-1 focus:ring-[#0073b7]/50 px-3 py-1.5 rounded-lg text-xs font-semibold outline-none text-slate-800 transition-all cursor-pointer"
+                  >
+                    <option value="all">-- All Camps --</option>
+                    {dynamicCampOptions.map((campName) => (
+                      <option key={campName} value={campName}>{campName}</option>
+                    ))}
+                  </select>
+                </div>
 
-              {/* Company / Router */}
-              <div className="lg:col-span-2">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Company</label>
-                <select 
-                  value={selectedRouter}
-                  onChange={(e) => setSelectedRouter(e.target.value)}
-                  className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 transition-all cursor-pointer"
-                >
-                  <option value="all">-- All Companies --</option>
-                  <option value="1">Apricom DXB</option>
-                </select>
-              </div>
+                {/* Stacked Chart toggle */}
+                <div className="lg:col-span-2 flex items-center gap-2 pb-1.5">
+                  <label className="text-xs font-semibold text-slate-500 block mb-0 cursor-pointer select-none">
+                    Stacked Chart
+                  </label>
+                  <input 
+                    type="checkbox" 
+                    id="stacked_chart" 
+                    checked={isStacked}
+                    onChange={(e) => setIsStacked(e.target.checked)}
+                    className="w-4 h-4 text-[#0073b7] border-slate-300 rounded focus:ring-[#0073b7] cursor-pointer"
+                  />
+                </div>
 
-              {/* Stacked Chart toggle */}
-              <div className="lg:col-span-2 flex items-center gap-2 mb-2 pb-1.5">
-                <input 
-                  type="checkbox" 
-                  id="stacked_chart" 
-                  checked={isStacked}
-                  onChange={(e) => setIsStacked(e.target.checked)}
-                  className="w-4 h-4 text-[#3958b2] border-slate-300 rounded focus:ring-[#3958b2]"
-                />
-                <label htmlFor="stacked_chart" className="text-xs font-bold text-slate-600 cursor-pointer select-none">
-                  Stacked Chart
-                </label>
-              </div>
+                {/* Search button */}
+                <div className="lg:col-span-1">
+                  <button 
+                    type="submit" 
+                    className="bg-[#0073b7] hover:bg-[#006097] text-white font-bold px-4 py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all shadow-sm text-xs w-full"
+                  >
+                    <Search className="h-3.5 w-3.5" />
+                    Search
+                  </button>
+                </div>
 
-              {/* Search button */}
-              <div className="lg:col-span-1">
-                <button 
-                  type="submit" 
-                  className="bg-[#3958b2] hover:bg-[#2d468f] text-white font-bold p-2.5 rounded-lg flex items-center justify-center transition-all shadow-sm text-sm w-full"
-                >
-                  <Search className="h-4.5 w-4.5" />
-                </button>
-              </div>
+              </form>
+            </section>
 
-            </form>
-          </section>
+            {/* Composed Multi-Bar & Line Chart Card */}
+            <div className="bg-white border border-[#cfdbe6] rounded-xl p-6 shadow-sm flex-1 flex flex-col min-h-[480px]">
+              <div className="flex-1 w-full min-h-[380px] flex flex-col lg:flex-row gap-4 items-center">
+                
+                {/* Chart Canvas */}
+                <div className="flex-1 w-full h-[400px]">
+                  {loadingSales ? (
+                    <div className="h-full flex items-center justify-center">
+                      <RefreshCw className="h-6 w-6 animate-spin text-slate-400" />
+                    </div>
+                  ) : campChartData.length > 0 && activeCampsInChart.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <ComposedChart data={campChartData} margin={{ top: 25, right: 30, left: 10, bottom: 25 }}>
+                        <CartesianGrid strokeDasharray="0" stroke="#e2e8f0" vertical={false} />
+                        <XAxis 
+                          dataKey="month" 
+                          stroke="#94a3b8" 
+                          tick={{ fill: "#1e293b", fontSize: 11, fontWeight: 600 }}
+                          tickLine={false}
+                          label={{ value: "Year | Month", position: "insideBottom", offset: -15, fill: "#64748b", fontSize: 11, fontStyle: "italic" }}
+                        />
+                        <YAxis 
+                          stroke="#94a3b8" 
+                          tick={{ fill: "#64748b", fontSize: 11 }} 
+                          tickLine={false}
+                          tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}K` : v}
+                          label={{ value: "Sales Amount (AED)", angle: -90, position: "insideLeft", offset: 0, fill: "#64748b", fontSize: 11, fontStyle: "italic" }}
+                        />
+                        <Tooltip 
+                          formatter={(value: any, name: any) => [`AED ${Number(value).toLocaleString()}`, name]}
+                          contentStyle={{ backgroundColor: "#ffffff", borderColor: "#cfdbe6", borderRadius: "8px", fontSize: "12px" }}
+                        />
+                        {activeCampsInChart.map((campName, idx) => (
+                          <Bar 
+                            key={campName} 
+                            dataKey={campName} 
+                            name={campName} 
+                            fill={CHART_CAMP_COLORS[idx % CHART_CAMP_COLORS.length]} 
+                            stackId={isStacked ? "stackA" : undefined}
+                            maxBarSize={65}
+                          />
+                        ))}
+                        <Line 
+                          type="monotone" 
+                          dataKey="Total" 
+                          name="Total Sales (...)" 
+                          stroke="#22c55e" 
+                          strokeWidth={1.5} 
+                          dot={{ fill: "#22c55e", r: 3 }}
+                          label={({ x, y, value }: any) => {
+                            if (!value || typeof x !== "number" || typeof y !== "number") return null;
+                            return (
+                              <text x={x} y={y - 8} fill="#16a34a" fontSize={11} fontWeight="bold" textAnchor="middle">
+                                {Number(value).toLocaleString()}
+                              </text>
+                            );
+                          }}
+                        />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-slate-400 text-sm italic">
+                      No sales data available for the selected month range and camps.
+                    </div>
+                  )}
+                </div>
+
+                {/* Right-Side Camp Legends matching reference image */}
+                {activeCampsInChart.length > 0 && (
+                  <div className="flex flex-col gap-3 min-w-[150px] p-4 bg-slate-50/70 border border-slate-200 rounded-lg self-center shrink-0">
+                    <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Camps</div>
+                    {activeCampsInChart.map((campName, idx) => (
+                      <div key={campName} className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+                        <span 
+                          className="w-4 h-3.5 rounded-xs shrink-0 inline-block shadow-xs" 
+                          style={{ backgroundColor: CHART_CAMP_COLORS[idx % CHART_CAMP_COLORS.length] }}
+                        />
+                        <span className="truncate max-w-[120px]" title={campName}>{campName}</span>
+                      </div>
+                    ))}
+                    <div className="flex items-center gap-2 text-xs font-semibold text-slate-700 pt-2 border-t border-slate-200">
+                      <span className="w-4 h-0.5 bg-[#22c55e] inline-block" />
+                      <span className="truncate">Total Sales (...)</span>
+                    </div>
+                  </div>
+                )}
+
+              </div>
+            </div>
+
+          </div>
         )}
 
         {/* ── 4. FILTER BAR (Voucher Data [Validity] & [Hotspot] Reports) ──── */}
