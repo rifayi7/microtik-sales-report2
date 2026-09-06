@@ -3525,40 +3525,47 @@ export default function SalesReportDashboard() {
                 </div>
               </div>
 
-              {/* Card 3: Collection */}
-              <div className="md:col-span-4 bg-gradient-to-br from-[#ffbc36] to-[#ff6228] text-white rounded-xl p-6 shadow-md relative overflow-hidden group min-h-[140px]">
-                <div className="absolute -right-3 -bottom-5 opacity-10 group-hover:scale-110 transition-transform duration-300">
+              {/* Card 3: Expense (Placeholder until expense logic is implemented) */}
+              <div className="md:col-span-4 bg-gradient-to-br from-[#ffbc36] to-[#ff6228] text-white rounded-xl p-5 shadow-md relative overflow-hidden group min-h-[140px] flex flex-col justify-between">
+                <div className="absolute -right-3 -bottom-5 opacity-10 group-hover:scale-110 transition-transform duration-300 pointer-events-none">
                   <DollarSign className="h-28 w-28 text-white" />
                 </div>
-                <div className="text-xs uppercase font-bold tracking-widest opacity-85 mb-1.5 flex justify-between items-center">
-                  <span>Collection Details</span>
-                  <DollarSign className="h-4.5 w-4.5" />
+                
+                <div className="text-xs uppercase font-bold tracking-widest opacity-85 mb-2 flex justify-between items-center z-10">
+                  <div className="flex items-center gap-1.5">
+                    <DollarSign className="h-4 w-4" />
+                    <span>Expense</span>
+                  </div>
+                  <span className="bg-white/20 text-white text-[10px] font-black px-2 py-0.5 rounded-full">
+                    Overview
+                  </span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 mb-4">
+                <div className="grid grid-cols-2 gap-2 mb-2 z-10">
                   <div>
-                    <div className="flex items-baseline gap-0.5">
-                      <span className="text-[10px] font-bold">AED</span>
-                      <span className="text-xl font-black tracking-tight leading-none">
-                        {summaryData?.comparison.today.revenue.toLocaleString(undefined, { minimumFractionDigits: 2 }) || "0.00"}
+                    <span className="text-[9px] uppercase font-bold opacity-75 block">Today's Expense</span>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-xs font-bold opacity-80">AED</span>
+                      <span className="text-xl sm:text-2xl font-black tracking-tight leading-none">
+                        0.00
                       </span>
                     </div>
-                    <span className="text-[9px] font-bold opacity-90 block mt-1">Today's Collection</span>
                   </div>
                   
                   <div className="border-l border-white/25 pl-3">
-                    <div className="flex items-baseline gap-0.5">
-                      <span className="text-[10px] font-bold">AED</span>
-                      <span className="text-xl font-black tracking-tight leading-none">
-                        {summaryData?.summary.totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 }) || "0"}
+                    <span className="text-[9px] uppercase font-bold opacity-75 block">Monthly Expense</span>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-xs font-bold opacity-80">AED</span>
+                      <span className="text-xl sm:text-2xl font-black tracking-tight leading-none">
+                        0.00
                       </span>
                     </div>
-                    <span className="text-[9px] font-bold opacity-90 block mt-1">Monthly Collection</span>
                   </div>
                 </div>
 
-                <div className="text-[10px] font-bold opacity-80 pt-2 border-t border-white/20">
-                  Last Update: Sync Completed
+                <div className="pt-2 border-t border-white/20 flex items-center justify-between text-[10px] font-bold z-10">
+                  <span className="text-white/90">No expense records</span>
+                  <span className="opacity-80">Last Update: Today's Sync</span>
                 </div>
               </div>
 
