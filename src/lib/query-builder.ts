@@ -23,18 +23,15 @@ export function buildWhereClause(searchParams: URLSearchParams): {
   const soldType = searchParams.get("soldType");
   const search = searchParams.get("search");
 
-  // Date filtering: SQLite stores datetime('now') as 'YYYY-MM-DD HH:MM:SS' (UTC)
-  // Ensure we match local date ranges by formatting them
+  // Date filtering: SQLite stores datetime in UTC. Convert to Dubai time (UTC+4) for business day filtering
   if (startDate) {
-    // e.g. '2026-07-16' becomes '2026-07-16 00:00:00'
-    conditions.push("v.used_at >= ?");
-    params.push(`${startDate} 00:00:00`);
+    conditions.push("date(v.used_at, '+4 hours') >= date(?)");
+    params.push(startDate);
   }
   
   if (endDate) {
-    // e.g. '2026-07-16' becomes '2026-07-16 23:59:59'
-    conditions.push("v.used_at <= ?");
-    params.push(`${endDate} 23:59:59`);
+    conditions.push("date(v.used_at, '+4 hours') <= date(?)");
+    params.push(endDate);
   }
 
   if (agent && agent !== "all" && agent !== "") {

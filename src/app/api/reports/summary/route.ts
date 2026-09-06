@@ -60,10 +60,10 @@ export async function GET(request: Request) {
       revenue: number;
     }[];
 
-    // 4. Get Sales Trend grouped by day (Daily)
+    // 4. Get Sales Trend grouped by day (Dubai Business Day)
     const trendSql = `
       SELECT 
-        strftime('%Y-%m-%d', v.used_at) as date, 
+        date(v.used_at, '+4 hours') as date, 
         COUNT(*) as sales, 
         SUM(COALESCE(v.price_charged, 0)) as revenue 
       FROM vouchers v
