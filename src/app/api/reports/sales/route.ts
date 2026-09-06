@@ -43,7 +43,7 @@ export async function GET(request: Request) {
         v.validity_days as validity, 
         v.used_by as mobile, 
         v.used_at as timestamp, 
-        v.sold_by as seller, 
+        COALESCE(NULLIF(sp.display_name, ''), NULLIF(sp.username, ''), NULLIF(v.sold_by, '')) as seller, 
         v.router_id as routerId,
         COALESCE(v.price_charged, 0) as price,
         COALESCE(NULLIF(r.camp, ''), NULLIF(r.sessionName, ''), NULLIF(c.name, ''), NULLIF(v.router_id, '')) as campName,
@@ -51,6 +51,7 @@ export async function GET(request: Request) {
       FROM vouchers v
       LEFT JOIN routers r ON (CAST(r.id AS TEXT) = CAST(v.router_id AS TEXT) OR r.sessionName = v.router_id)
       LEFT JOIN camps c ON (v.router_id = c.name OR CAST(v.router_id AS TEXT) = CAST(c.id AS TEXT) OR v.router_id = c.hotspot_name OR r.camp = c.name)
+      LEFT JOIN sales_persons sp ON (v.sales_person_id = sp.id OR v.sold_by = sp.username OR v.sold_by = sp.display_name)
       ${whereClause}
       ORDER BY v.used_at DESC
       LIMIT ? OFFSET ?

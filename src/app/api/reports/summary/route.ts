@@ -29,12 +29,13 @@ export async function GET(request: Request) {
     // 2. Get Sales Performance by Agent
     const agentSql = `
       SELECT 
-        v.sold_by as name, 
+        COALESCE(NULLIF(sp.display_name, ''), NULLIF(sp.username, ''), NULLIF(v.sold_by, '')) as name, 
         COUNT(*) as salesCount, 
         SUM(COALESCE(v.price_charged, 0)) as revenue 
       FROM vouchers v
+      LEFT JOIN sales_persons sp ON (v.sales_person_id = sp.id OR v.sold_by = sp.username OR v.sold_by = sp.display_name)
       ${whereClause} AND v.sold_by IS NOT NULL AND v.sold_by != ''
-      GROUP BY v.sold_by
+      GROUP BY COALESCE(NULLIF(sp.display_name, ''), NULLIF(sp.username, ''), NULLIF(v.sold_by, ''))
       ORDER BY revenue DESC
     `;
     const agents = (await db.execute({ sql: agentSql, args: [...params] })).rows as unknown as {
