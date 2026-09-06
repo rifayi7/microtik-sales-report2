@@ -70,6 +70,35 @@ export function buildWhereClause(searchParams: URLSearchParams): {
     params.push(likeParam, likeParam);
   }
 
+  // Scoping for report viewers / assigned camps
+  const allowedCampsParam = searchParams.get("allowedCamps");
+  const userType = searchParams.get("userType");
+  if (userType === "report_user") {
+    if (!allowedCampsParam || allowedCampsParam.trim() === "" || allowedCampsParam === "[]") {
+      // User has 0 allowed camps -> Return NO records
+      conditions.push("1 = 0");
+    } else {
+      let allowedCamps: string[] = [];
+      try {
+        allowedCamps = JSON.parse(allowedCampsParam);
+      } catch {
+        allowedCamps = allowedCampsParam.split(",").map(s => s.trim()).filter(Boolean);
+      }
+
+      if (allowedCamps.length === 0) {
+        conditions.push("1 = 0");
+      } else {
+        const placeholders = allowedCamps.map(() => "?").join(",");
+        conditions.push(`(
+          v.router_id IN (${placeholders})
+          OR v.router_id IN (SELECT id FROM routers WHERE camp IN (${placeholders}))
+          OR v.router_id IN (SELECT sessionName FROM routers WHERE camp IN (${placeholders}))
+        )`);
+        params.push(...allowedCamps, ...allowedCamps, ...allowedCamps);
+      }
+    }
+  }
+
   const whereClause = conditions.length > 0 ? "WHERE " + conditions.join(" AND ") : "";
 
   return {

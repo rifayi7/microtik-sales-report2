@@ -76,7 +76,11 @@ interface SummaryData {
     activeAgentsCount: number;
   };
   comparison: {
-    today: { sales: number; revenue: number };
+    today: { 
+      sales: number; 
+      revenue: number;
+      camps?: { campName: string; count: number; revenue: number }[];
+    };
     yesterday: { sales: number; revenue: number };
   };
   lastMonth?: {
@@ -294,6 +298,11 @@ export default function SalesReportDashboard() {
   // Auth & Profile states
   const [isLoggedIn, setIsLoggedIn] = useState(true);
   const [loggedInUser, setLoggedInUser] = useState("admin");
+  const [userDisplayName, setUserDisplayName] = useState("Super Administrator");
+  const [userType, setUserType] = useState<"superadmin" | "report_user">("superadmin");
+  const [companyId, setCompanyId] = useState<number | null>(null);
+  const [companyName, setCompanyName] = useState<string>("");
+  const [allowedCamps, setAllowedCamps] = useState<string[]>([]);
   const [authUsername, setAuthUsername] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
@@ -305,7 +314,7 @@ export default function SalesReportDashboard() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [changingPassword, setChangingPassword] = useState(false);
 
-  // Initialize dates: default to current month
+  // Initialize dates and session: default to current month & restore session
   useEffect(() => {
     setIsMounted(true);
     const now = new Date();
@@ -324,6 +333,25 @@ export default function SalesReportDashboard() {
     
     setRegExpense(prev => ({ ...prev, expense_date: todayStr }));
     setCommExpense(prev => ({ ...prev, expense_date: todayStr }));
+
+    // Restore login session from localStorage
+    try {
+      const savedSession = localStorage.getItem("linkfi_sales_user_session");
+      if (savedSession) {
+        const parsed = JSON.parse(savedSession);
+        if (parsed?.username) {
+          setIsLoggedIn(true);
+          setLoggedInUser(parsed.username);
+          setUserDisplayName(parsed.displayName || parsed.username);
+          setUserType(parsed.userType || "superadmin");
+          setCompanyId(parsed.companyId ?? null);
+          setCompanyName(parsed.companyName || "");
+          setAllowedCamps(Array.isArray(parsed.allowedCamps) ? parsed.allowedCamps : []);
+        }
+      }
+    } catch (e) {
+      console.warn("Session restore error:", e);
+    }
 
     // Dynamically load camps and companies on initial mount
     fetch("/api/reports/camps")
@@ -430,6 +458,26 @@ export default function SalesReportDashboard() {
       if (data.success) {
         setIsLoggedIn(true);
         setLoggedInUser(data.username);
+        setUserDisplayName(data.displayName || data.username);
+        setUserType(data.userType || "superadmin");
+        setCompanyId(data.companyId ?? null);
+        setCompanyName(data.companyName || "");
+        setAllowedCamps(Array.isArray(data.allowedCamps) ? data.allowedCamps : []);
+
+        // Save to localStorage
+        try {
+          localStorage.setItem("linkfi_sales_user_session", JSON.stringify({
+            username: data.username,
+            displayName: data.displayName || data.username,
+            userType: data.userType || "superadmin",
+            companyId: data.companyId ?? null,
+            companyName: data.companyName || "",
+            allowedCamps: Array.isArray(data.allowedCamps) ? data.allowedCamps : []
+          }));
+        } catch (e) {
+          console.warn("Storage save error:", e);
+        }
+
         setAuthUsername("");
         setAuthPassword("");
       } else {
@@ -438,6 +486,16 @@ export default function SalesReportDashboard() {
     } catch (err) {
       console.error(err);
       setAuthError("Failed to authenticate");
+    }
+  };
+
+  const handleLogout = () => {
+    setIsLoggedIn(false);
+    setIsProfileDropdownOpen(false);
+    try {
+      localStorage.removeItem("linkfi_sales_user_session");
+    } catch (e) {
+      console.warn("Storage remove error:", e);
     }
   };
 
@@ -453,6 +511,10 @@ export default function SalesReportDashboard() {
       if (selectedValidity) params.append("validity", selectedValidity);
       if (selectedRouter) params.append("router", selectedRouter);
       if (searchQuery) params.append("search", searchQuery);
+      if (userType) params.append("userType", userType);
+      if (userType === "report_user") {
+        params.append("allowedCamps", JSON.stringify(allowedCamps));
+      }
 
       const res = await fetch(`/api/reports/summary?${params.toString()}`);
       const data = await res.json();
@@ -485,6 +547,10 @@ export default function SalesReportDashboard() {
       if (selectedCamp && selectedCamp !== "all") params.append("camp", selectedCamp);
       if (selectedSoldType && selectedSoldType !== "all") params.append("soldType", selectedSoldType);
       if (searchQuery) params.append("search", searchQuery);
+      if (userType) params.append("userType", userType);
+      if (userType === "report_user") {
+        params.append("allowedCamps", JSON.stringify(allowedCamps));
+      }
 
       const res = await fetch(`/api/reports/sales?${params.toString()}`);
       const data = await res.json();
@@ -1286,6 +1352,9 @@ export default function SalesReportDashboard() {
     expenseSearch,
     expenseCompanyFilter,
     expenseCategoryFilter,
+    userType,
+    companyId,
+    allowedCamps,
     isMounted
   ]);
 
@@ -1768,12 +1837,12 @@ export default function SalesReportDashboard() {
       <div className="min-h-screen bg-[#d5e5f4] flex items-center justify-center font-sans p-6">
         <div className="bg-white border border-[#cfdbe6] rounded-xl shadow-2xl p-8 w-[400px] flex flex-col text-slate-800">
           <div className="flex items-center gap-2 justify-center mb-6">
-            <div className="bg-[#ffbc36] text-white h-9 w-9 rounded-lg flex items-center justify-center font-black text-xl shadow-md">W</div>
-            <span className="font-extrabold text-[#3958b2] text-xl tracking-wider">WIFILINK</span>
+            <img src="/linkfi-logo.png" alt="LinkFi" className="h-10 w-auto object-contain" />
+            <span className="font-extrabold text-[#1e3c72] text-2xl tracking-wider">LinkFi</span>
           </div>
 
           <h4 className="font-black text-slate-700 text-center text-sm uppercase tracking-wide mb-6">
-            Sign In to Admin Portal
+            Sign In to Sales Report Portal
           </h4>
 
           {authError && (
@@ -1790,7 +1859,7 @@ export default function SalesReportDashboard() {
                 value={authUsername}
                 onChange={(e) => setAuthUsername(e.target.value)}
                 className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2.5 rounded-lg text-sm font-bold outline-none text-slate-800"
-                placeholder="e.g. iqbaal"
+                placeholder="e.g. ahmed"
                 required
               />
             </div>
@@ -1807,7 +1876,7 @@ export default function SalesReportDashboard() {
             </div>
 
             <button 
-              type="submit"
+              type="submit" 
               className="w-full py-2.5 bg-[#3958b2] hover:bg-[#2d468f] text-white rounded-lg transition-all shadow-md font-black uppercase tracking-wider text-xs"
             >
               Log In
@@ -1823,11 +1892,29 @@ export default function SalesReportDashboard() {
       
       {/* ── TOP HEADER MENU (White background) ─────────────────────────────────── */}
       <header className="fixed top-0 left-0 w-full h-[70px] bg-white border-b border-[#cfdbe6] flex items-center justify-between px-6 z-50">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <div className="bg-[#ffbc36] text-white h-9 w-9 rounded-lg flex items-center justify-center font-black text-xl shadow-md">W</div>
-            <span className="font-extrabold text-[#3958b2] text-xl tracking-wider">WIFILINK</span>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2.5">
+            <img src="/linkfi-logo.png" alt="LinkFi" className="h-9 w-auto object-contain" />
+            <span className="font-extrabold text-[#1e3c72] text-xl tracking-wider hidden sm:inline">LinkFi</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider bg-[#3958b2]/10 text-[#3958b2] px-2 py-0.5 rounded border border-[#3958b2]/20">
+              Sales Portal
+            </span>
           </div>
+
+          {/* Role and Company Status Pill */}
+          {userType === "report_user" ? (
+            <div className="hidden md:flex items-center gap-2 bg-indigo-50 border border-indigo-200 text-indigo-800 text-xs px-3 py-1 rounded-full font-bold">
+              <span>🏢 {companyName || `Company #${companyId}`}</span>
+              <span className="text-indigo-400">•</span>
+              <span className="text-indigo-600">{allowedCamps.length} Allowed Camps</span>
+            </div>
+          ) : (
+            <div className="hidden md:flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs px-3 py-1 rounded-full font-bold">
+              <span>🛡️ Super Administrator</span>
+              <span className="text-emerald-400">•</span>
+              <span className="text-emerald-600">Full Access (All Camps)</span>
+            </div>
+          )}
         </div>
         
         {/* User profile details in top right */}
@@ -1836,16 +1923,24 @@ export default function SalesReportDashboard() {
             onClick={(e) => { e.stopPropagation(); setIsProfileDropdownOpen(!isProfileDropdownOpen); }}
             className="flex items-center gap-3 cursor-pointer group select-none"
           >
-            <div className="h-9 w-9 rounded-full bg-[#3958b2] text-white flex items-center justify-center font-bold text-sm uppercase">
+            <div className="h-9 w-9 rounded-full bg-[#3958b2] text-white flex items-center justify-center font-bold text-sm uppercase shadow-sm">
               {loggedInUser.substring(0, 2).toUpperCase()}
             </div>
             <div className="hidden sm:block text-right">
-              <span className="font-bold text-sm text-[#333] block">{loggedInUser}</span>
+              <span className="font-bold text-sm text-[#333] block leading-tight">{userDisplayName || loggedInUser}</span>
+              <span className="text-[10px] font-semibold text-slate-500 block leading-tight">
+                {userType === "report_user" ? (companyName || `Company #${companyId}`) : "Super Administrator"}
+              </span>
             </div>
             <ChevronDown className="h-4 w-4 text-[#888] group-hover:text-[#333] transition-colors" />
           </div>
           {isProfileDropdownOpen && (
-            <div className="absolute top-full right-0 mt-2 bg-white border border-[#cfdbe6] rounded-md shadow-lg min-w-[160px] z-50 flex flex-col py-1 font-bold text-xs text-slate-700">
+            <div className="absolute top-full right-0 mt-2 bg-white border border-[#cfdbe6] rounded-md shadow-lg min-w-[180px] z-50 flex flex-col py-1 font-bold text-xs text-slate-700">
+              <div className="px-4 py-2 border-b border-slate-100 bg-slate-50">
+                <p className="text-[10px] text-slate-400 uppercase">Signed in as</p>
+                <p className="font-bold text-slate-800 truncate">{loggedInUser}</p>
+                <p className="text-[10px] text-[#3958b2] font-semibold">{userType === "report_user" ? `Assigned: ${allowedCamps.length} Camps` : "Global Superadmin"}</p>
+              </div>
               <button 
                 onClick={() => { setActiveTab("change-password"); setIsProfileDropdownOpen(false); }}
                 className="px-4 py-2.5 hover:text-[#1e3c72] hover:bg-[#bfebff]/30 text-left w-full transition-all"
@@ -1853,7 +1948,7 @@ export default function SalesReportDashboard() {
                 Change Password
               </button>
               <button 
-                onClick={() => { setIsLoggedIn(false); setIsProfileDropdownOpen(false); }}
+                onClick={handleLogout}
                 className="px-4 py-2.5 text-red-500 hover:text-red-700 hover:bg-red-50 text-left w-full transition-all border-t border-slate-100"
               >
                 Logout
@@ -3317,64 +3412,116 @@ export default function SalesReportDashboard() {
             {/* Top Row Cards: Outstanding, Today's Sale, Collection */}
             <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
               
-              {/* Card 1: Outstanding Balance (Total Revenue) */}
-              <div className="md:col-span-4 bg-gradient-to-br from-[#35bccc] to-[#3958b2] text-white rounded-xl p-6 shadow-md relative overflow-hidden group min-h-[140px]">
-                <div className="absolute -right-3 -bottom-5 opacity-10 group-hover:scale-110 transition-transform duration-300">
+              {/* Card 1: Outstanding Balance & User Scoped Overview */}
+              <div className="md:col-span-4 bg-gradient-to-br from-[#35bccc] to-[#3958b2] text-white rounded-xl p-5 shadow-md relative overflow-hidden group min-h-[140px] flex flex-col justify-between">
+                <div className="absolute -right-3 -bottom-5 opacity-10 group-hover:scale-110 transition-transform duration-300 pointer-events-none">
                   <Coins className="h-28 w-28 text-white" />
                 </div>
-                <div className="text-xs uppercase font-bold tracking-widest opacity-85 mb-1.5 flex justify-between items-center">
-                  <span>Outstanding Balance</span>
-                  <DollarSign className="h-4.5 w-4.5" />
+                
+                {/* Header with Assigned Scope */}
+                <div className="text-xs uppercase font-bold tracking-widest opacity-85 mb-2 flex justify-between items-center z-10">
+                  <div className="flex items-center gap-1.5">
+                    <DollarSign className="h-4 w-4" />
+                    <span>Outstanding Balance</span>
+                  </div>
+                  <span className="bg-white/20 text-white text-[10px] font-black px-2 py-0.5 rounded-full">
+                    {userType === "report_user" ? `${allowedCamps.length} Allowed Camps` : "All Camps"}
+                  </span>
                 </div>
                 
-                <div className="flex items-baseline gap-1.5 mb-4">
-                  <span className="text-xs font-bold">AED</span>
-                  <span className="text-2xl sm:text-3xl font-black tracking-tight leading-none">
-                    {summaryData?.summary.totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"}
-                  </span>
+                {/* Revenue and Sales Count */}
+                <div className="flex items-baseline justify-between mb-2 z-10">
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-xs font-bold opacity-80">AED</span>
+                    <span className="text-2xl sm:text-3xl font-black tracking-tight leading-none">
+                      {summaryData?.summary.totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"}
+                    </span>
+                  </div>
                   
-                  <div className="ml-auto bg-white/20 px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap">
-                    AED 0.00 Pending
+                  <div className="text-right">
+                    <span className="text-[10px] font-bold opacity-80 block uppercase">Total Sales</span>
+                    <span className="text-lg sm:text-xl font-black bg-white/20 px-2 py-0.5 rounded">
+                      {summaryData?.summary.totalSales.toLocaleString() || "0"}
+                    </span>
                   </div>
                 </div>
 
-                <div className="text-[10px] font-bold opacity-80 pt-2 border-t border-white/20">
-                  Last Update: Today's Sync
+                {/* Allowed Camps Mini Badges / Scoping info */}
+                <div className="pt-2 border-t border-white/20 flex items-center justify-between text-[10px] font-bold z-10">
+                  <div className="truncate max-w-[200px]" title={userType === "report_user" ? (allowedCamps.length > 0 ? allowedCamps.join(", ") : "None") : "Global unrestricted access"}>
+                    {userType === "report_user" ? (
+                      allowedCamps.length > 0 ? (
+                        <span>🏕️ {allowedCamps.slice(0, 2).join(", ")}{allowedCamps.length > 2 ? ` +${allowedCamps.length - 2} more` : ""}</span>
+                      ) : (
+                        <span className="text-amber-200">⚠️ No Camps Assigned (0)</span>
+                      )
+                    ) : (
+                      <span>🛡️ All Camps Across Companies</span>
+                    )}
+                  </div>
+                  <span className="opacity-80">Last Update: Today's Sync</span>
                 </div>
               </div>
 
               {/* Card 2: Today's Sale */}
-              <div className="md:col-span-4 bg-gradient-to-br from-[#26b048] to-[#c9d668] text-white rounded-xl p-6 shadow-md relative overflow-hidden group min-h-[140px]">
-                <div className="absolute -right-3 -bottom-5 opacity-10 group-hover:scale-110 transition-transform duration-300">
+              <div className="md:col-span-4 bg-gradient-to-br from-[#26b048] to-[#c9d668] text-white rounded-xl p-5 shadow-md relative overflow-hidden group min-h-[140px] flex flex-col justify-between">
+                <div className="absolute -right-3 -bottom-5 opacity-10 group-hover:scale-110 transition-transform duration-300 pointer-events-none">
                   <TrendingUp className="h-28 w-28 text-white" />
                 </div>
-                <div className="text-xs uppercase font-bold tracking-widest opacity-85 mb-1.5 flex justify-between items-center">
-                  <span>Today's Sale</span>
-                  <TrendingUp className="h-4.5 w-4.5" />
+                
+                <div className="text-xs uppercase font-bold tracking-widest opacity-85 mb-2 flex justify-between items-center z-10">
+                  <div className="flex items-center gap-1.5">
+                    <TrendingUp className="h-4 w-4" />
+                    <span>Today's Sale</span>
+                  </div>
+                  <span className="bg-white/20 text-white text-[10px] font-black px-2 py-0.5 rounded-full">
+                    {summaryData?.comparison.today.camps && summaryData.comparison.today.camps.length > 0 
+                      ? `${summaryData.comparison.today.camps.length} Camps Active Today`
+                      : "0 Camps Active Today"}
+                  </span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 mb-4">
+                <div className="grid grid-cols-2 gap-2 mb-2 z-10">
                   <div>
                     <span className="text-[9px] uppercase font-bold opacity-75 block">Sale Amount</span>
                     <div className="flex items-baseline gap-1">
-                      <span className="text-xs font-bold">AED</span>
+                      <span className="text-xs font-bold opacity-80">AED</span>
                       <span className="text-xl sm:text-2xl font-black tracking-tight leading-none">
-                        {summaryData?.comparison.today.revenue.toLocaleString() || "0.00"}
+                        {summaryData?.comparison.today.revenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"}
                       </span>
                     </div>
                   </div>
                   <div className="text-right">
-                    <span className="text-[9px] uppercase font-bold opacity-75 block">Count</span>
+                    <span className="text-[9px] uppercase font-bold opacity-75 block">Total Count</span>
                     <div className="flex items-baseline gap-1 justify-end">
-                      <span className="text-xl sm:text-2xl font-black tracking-tight leading-none">
+                      <span className="text-xl sm:text-2xl font-black tracking-tight leading-none bg-white/20 px-2 py-0.5 rounded">
                         {summaryData?.comparison.today.sales || "0"}
                       </span>
                     </div>
                   </div>
                 </div>
 
-                <div className="text-[10px] font-bold opacity-80 pt-2 border-t border-white/20">
-                  Last Sale Time: {summaryData?.trends && summaryData.trends.length > 0 ? "Today" : "No sales"}
+                {/* Today's active camps breakdown list with count */}
+                <div className="pt-2 border-t border-white/20 text-[10px] font-bold z-10">
+                  {summaryData?.comparison.today.camps && summaryData.comparison.today.camps.length > 0 ? (
+                    <div className="flex flex-wrap items-center gap-1.5 max-h-[38px] overflow-y-auto pr-1">
+                      {summaryData.comparison.today.camps.map((c) => (
+                        <span 
+                          key={c.campName} 
+                          className="bg-black/20 hover:bg-black/30 backdrop-blur-sm px-2 py-0.5 rounded text-[9px] font-bold flex items-center gap-1 transition-all"
+                          title={`${c.campName}: ${c.count} vouchers sold (AED ${c.revenue})`}
+                        >
+                          <span className="truncate max-w-[90px]">{c.campName}:</span>
+                          <span className="bg-white/30 text-white font-black px-1 rounded text-[8px]">{c.count}</span>
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex justify-between items-center text-white/80">
+                      <span>No sales recorded today in allowed camps</span>
+                      <span className="text-[9px]">0 vouchers</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
