@@ -531,8 +531,21 @@ export default function SalesReportDashboard() {
     setLoadingSummary(true);
     try {
       const params = new URLSearchParams();
-      if (startDate) params.append("startDate", startDate);
-      if (endDate) params.append("endDate", endDate);
+      
+      if (activeTab === "monthly-sales" && selectedMonth) {
+        const [mYear, mMonth] = selectedMonth.split("-");
+        const mStart = `${mYear}-${mMonth}-01`;
+        const lastDay = new Date(Number(mYear), Number(mMonth), 0).getDate();
+        const mEnd = `${mYear}-${mMonth}-${String(lastDay).padStart(2, "0")}`;
+        params.append("startDate", mStart);
+        params.append("endDate", mEnd);
+        if (selectedCamp && selectedCamp !== "all") params.append("camp", selectedCamp);
+      } else {
+        if (startDate) params.append("startDate", startDate);
+        if (endDate) params.append("endDate", endDate);
+        if (selectedCamp && selectedCamp !== "all") params.append("camp", selectedCamp);
+      }
+
       if (selectedAgent) params.append("agent", selectedAgent);
       if (selectedValidity) params.append("validity", selectedValidity);
       if (selectedRouter) params.append("router", selectedRouter);
@@ -565,8 +578,18 @@ export default function SalesReportDashboard() {
       const limitVal = ["monthly-sales", "sales-chart"].includes(activeTab) ? "10000" : String(entriesLimit);
       params.append("limit", limitVal);
       
-      if (startDate) params.append("startDate", startDate);
-      if (endDate) params.append("endDate", endDate);
+      if (activeTab === "monthly-sales" && selectedMonth) {
+        const [mYear, mMonth] = selectedMonth.split("-");
+        const mStart = `${mYear}-${mMonth}-01`;
+        const lastDay = new Date(Number(mYear), Number(mMonth), 0).getDate();
+        const mEnd = `${mYear}-${mMonth}-${String(lastDay).padStart(2, "0")}`;
+        params.append("startDate", mStart);
+        params.append("endDate", mEnd);
+      } else {
+        if (startDate) params.append("startDate", startDate);
+        if (endDate) params.append("endDate", endDate);
+      }
+
       if (selectedAgent) params.append("agent", selectedAgent);
       if (selectedValidity) params.append("validity", selectedValidity);
       if (selectedRouter) params.append("router", selectedRouter);
@@ -2713,65 +2736,141 @@ export default function SalesReportDashboard() {
           </div>
         )}
 
-        {/* ── 2. FILTER BAR (Monthly Voucher Sales - Option 2) ────────────── */}
+        {/* ── 2. FILTER BAR & CONTENT (Monthly Voucher Sales) ────────────── */}
         {activeTab === "monthly-sales" && (
-          <section className="bg-white border border-[#cfdbe6] rounded-xl p-5 mb-6 shadow-sm">
-            <form onSubmit={handleSearchSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4 items-end">
-              
-              {/* Select Month Calendar */}
-              <div className="lg:col-span-3">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Select Month</label>
-                <div className="relative">
-                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <input 
-                    type="month" 
-                    value={selectedMonth}
-                    onChange={(e) => setSelectedMonth(e.target.value)}
-                    className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 pl-10 pr-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 transition-all"
-                  />
+          <div className="space-y-5 flex-1 flex flex-col">
+            
+            {/* Top Page Header Title + Last Login */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+              <h2 className="text-2xl font-bold text-slate-800 tracking-tight">
+                Monthly Voucher Sales
+              </h2>
+              <div className="text-xs text-slate-500 font-medium">
+                Last Login: <span className="font-bold text-[#0073b7]">September 06, 2026 10:51 pm</span>
+              </div>
+            </div>
+
+            {/* Filter Bar Card */}
+            <section className="bg-white border border-[#cfdbe6] rounded-xl p-4 shadow-sm">
+              <form onSubmit={handleSearchSubmit} className="flex flex-col lg:flex-row gap-4 items-end justify-between">
+                
+                <div className="flex flex-wrap items-end gap-4 flex-1">
+                  {/* Select Month Calendar */}
+                  <div className="w-48">
+                    <label className="text-xs font-semibold text-slate-500 block mb-1.5">Select Month</label>
+                    <div className="relative">
+                      <input 
+                        type="month" 
+                        value={selectedMonth}
+                        onChange={(e) => setSelectedMonth(e.target.value)}
+                        className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#0073b7] focus:ring-1 focus:ring-[#0073b7]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 transition-all cursor-pointer"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Camps dropdown */}
+                  <div className="w-56">
+                    <label className="text-xs font-semibold text-slate-500 block mb-1.5">Camps</label>
+                    <select 
+                      value={selectedCamp}
+                      onChange={(e) => setSelectedCamp(e.target.value)}
+                      className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#0073b7] focus:ring-1 focus:ring-[#0073b7]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 transition-all cursor-pointer"
+                    >
+                      <option value="all">Select Camp</option>
+                      {dynamicCampOptions.map(camp => (
+                        <option key={camp} value={camp}>{camp}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Submit search button */}
+                  <div>
+                    <button 
+                      type="submit" 
+                      className="bg-[#0073b7] hover:bg-[#006097] text-white font-bold px-6 py-2 rounded-lg flex items-center gap-1.5 transition-all shadow-sm text-sm"
+                    >
+                      <Search className="h-4 w-4" />
+                      Search
+                    </button>
+                  </div>
+                </div>
+
+                {/* Header metrics pills floated right */}
+                <div className="flex items-center gap-3">
+                  <div className="bg-[#0073b7] text-white px-5 py-2 rounded-lg text-sm font-bold shadow-sm flex items-center gap-2">
+                    <Calendar className="h-4 w-4" />
+                    <span>Total : {monthlyAggregatedTotals.count}</span>
+                  </div>
+                  <div className="bg-[#0073b7] text-white px-5 py-2 rounded-lg text-sm font-bold shadow-sm">
+                    <span>Amount : {monthlyAggregatedTotals.revenue}</span>
+                  </div>
+                </div>
+
+              </form>
+            </section>
+
+            {/* Total Sales Bar Chart Card */}
+            <div className="bg-white border border-[#cfdbe6] rounded-xl p-6 shadow-sm flex-1 flex flex-col min-h-[460px]">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-lg font-semibold text-slate-700">Total Sales</h3>
+                <div className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+                  <span className="w-3.5 h-3.5 bg-[#3b5998] rounded-xs inline-block"></span>
+                  <span>Sales Count</span>
                 </div>
               </div>
 
-              {/* Camps dropdown */}
-              <div className="lg:col-span-3">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 block">Camps</label>
-                <select 
-                  value={selectedRouter}
-                  onChange={(e) => setSelectedRouter(e.target.value)}
-                  className="w-full bg-[#f8fafc] border border-slate-300 focus:border-[#3958b2] focus:ring-1 focus:ring-[#3958b2]/50 px-3 py-2 rounded-lg text-sm font-semibold outline-none text-slate-800 transition-all cursor-pointer"
-                >
-                  <option value="all">-- Select Camp --</option>
-                  {campList.map(camp => (
-                    <option key={camp} value={camp}>{camp}</option>
-                  ))}
-                </select>
+              <div className="flex-1 w-full min-h-[360px]">
+                {loadingSummary ? (
+                  <div className="h-full flex items-center justify-center">
+                    <RefreshCw className="h-6 w-6 animate-spin text-slate-400" />
+                  </div>
+                ) : monthlyDailyTrends.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={380}>
+                    <BarChart data={monthlyDailyTrends} margin={{ top: 10, right: 20, left: -15, bottom: 25 }}>
+                      <CartesianGrid strokeDasharray="0" stroke="#e2e8f0" vertical={false} />
+                      <XAxis 
+                        dataKey="date" 
+                        stroke="#94a3b8" 
+                        tick={{ fill: "#64748b", fontSize: 11 }} 
+                        tickLine={false}
+                      />
+                      <YAxis 
+                        stroke="#94a3b8" 
+                        tick={{ fill: "#64748b", fontSize: 11 }} 
+                        tickLine={false}
+                        allowDecimals={false}
+                      />
+                      <Tooltip 
+                        content={({ active, payload, label }) => {
+                          if (active && payload && payload.length) {
+                            return (
+                              <div className="bg-white border border-slate-200 p-2.5 rounded-lg shadow-xl text-center">
+                                <p className="font-bold text-slate-800 text-xs">{label}</p>
+                                <p className="text-[#3958b2] font-extrabold text-xs mt-0.5">Sale Count: {payload[0].value}</p>
+                              </div>
+                            );
+                          }
+                          return null;
+                        }}
+                      />
+                      <Bar 
+                        dataKey="sales" 
+                        name="Sales Count" 
+                        fill="#3b5998" 
+                        maxBarSize={70} 
+                        radius={[0, 0, 0, 0]} 
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full flex items-center justify-center text-slate-400 text-sm italic">
+                    No sales data recorded for the selected month.
+                  </div>
+                )}
               </div>
+            </div>
 
-              {/* Submit search button */}
-              <div className="lg:col-span-2">
-                <button 
-                  type="submit" 
-                  className="bg-[#3958b2] hover:bg-[#2d468f] text-white font-bold px-5 py-2.5 rounded-lg flex items-center gap-1.5 transition-all shadow-sm text-sm w-full justify-center"
-                >
-                  <Search className="h-4.5 w-4.5" />
-                  Search
-                </button>
-              </div>
-
-              {/* Header metrics pills floated right */}
-              <div className="lg:col-span-4 flex gap-2 justify-end">
-                <div className="bg-[#3958b2]/10 text-[#3958b2] border border-[#3958b2]/20 px-4 py-2.5 rounded-lg text-xs font-black shadow-sm flex items-center gap-1">
-                  <Coins className="h-4 w-4" />
-                  <span>Amount : {monthlyAggregatedTotals.revenue.toLocaleString()}</span>
-                </div>
-                <div className="bg-[#26b048]/10 text-[#26b048] border border-[#26b048]/20 px-4 py-2.5 rounded-lg text-xs font-black shadow-sm flex items-center gap-1">
-                  <TrendingUp className="h-4 w-4" />
-                  <span>Total : {monthlyAggregatedTotals.count}</span>
-                </div>
-              </div>
-
-            </form>
-          </section>
+          </div>
         )}
 
         {/* ── 3. FILTER BAR (Voucher Sales Chart - Option 3) ──────────────── */}
