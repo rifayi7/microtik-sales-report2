@@ -1735,9 +1735,8 @@ export default function SalesReportDashboard() {
   const dynamicAgentOptions = useMemo(() => {
     const agents = new Set<string>();
 
-    // Combine salesPersonsList state and salesData.filters.allSalesPersons
+    // Source strictly from sales_persons master table
     const spSource = salesPersonsList.length > 0 ? salesPersonsList : (salesData?.filters?.allSalesPersons || []);
-    const voucherSellers = salesData?.filters?.voucherSellers || [];
 
     // Determine active company
     const activeCompany = (userType === "report_user" && companyName)
@@ -1774,36 +1773,17 @@ export default function SalesReportDashboard() {
       return allowed.map(c => String(c).trim()).includes(campName);
     };
 
-    // Add salespersons based on Company and Camp selection
+    // Add salespersons strictly based on Company and Camp selection
     spSource.forEach((sp: any) => {
       if (selectedCamp !== "all") {
         if (spMatchesCamp(sp, selectedCamp)) {
-          if (sp.displayName && sp.displayName.trim()) agents.add(sp.displayName.trim());
-          else if (sp.display_name && sp.display_name.trim()) agents.add(sp.display_name.trim());
-          else if (sp.username && sp.username.trim()) agents.add(sp.username.trim());
+          const name = (sp.displayName || sp.display_name || sp.username || "").trim();
+          if (name) agents.add(name);
         }
       } else {
         if (spMatchesCompany(sp)) {
-          if (sp.displayName && sp.displayName.trim()) agents.add(sp.displayName.trim());
-          else if (sp.display_name && sp.display_name.trim()) agents.add(sp.display_name.trim());
-          else if (sp.username && sp.username.trim()) agents.add(sp.username.trim());
-        }
-      }
-    });
-
-    // Also include any matching voucher sellers for that camp/company
-    voucherSellers.forEach((vs: any) => {
-      const vsComp = (vs.company_name || "").trim().toLowerCase();
-      const vsCamp = (vs.camp_name || "").trim();
-      if (activeCompany && vsComp && vsComp !== activeCompany.toLowerCase()) return;
-
-      if (selectedCamp !== "all") {
-        if (vsCamp === selectedCamp && vs.name && vs.name.trim()) {
-          agents.add(vs.name.trim());
-        }
-      } else {
-        if (vs.name && vs.name.trim()) {
-          agents.add(vs.name.trim());
+          const name = (sp.displayName || sp.display_name || sp.username || "").trim();
+          if (name) agents.add(name);
         }
       }
     });
@@ -1817,19 +1797,13 @@ export default function SalesReportDashboard() {
   const dynamicStaffList = useMemo(() => {
     const staff = new Set<string>();
     if (loggedInUser && loggedInUser !== "admin") staff.add(loggedInUser);
-    if (salesData?.filters?.allSalesPersons) {
-      salesData.filters.allSalesPersons.forEach((sp: any) => {
-        if (sp.username && sp.username.trim()) staff.add(sp.username.trim());
-        if (sp.display_name && sp.display_name.trim()) staff.add(sp.display_name.trim());
-      });
-    }
-    if (salesData?.filters?.voucherSellers) {
-      salesData.filters.voucherSellers.forEach((vs: any) => {
-        if (vs.name && vs.name.trim()) staff.add(vs.name.trim());
-      });
-    }
+    const spSource = salesPersonsList.length > 0 ? salesPersonsList : (salesData?.filters?.allSalesPersons || []);
+    spSource.forEach((sp: any) => {
+      const name = (sp.displayName || sp.display_name || sp.username || "").trim();
+      if (name) staff.add(name);
+    });
     return Array.from(staff).sort((a, b) => a.localeCompare(b));
-  }, [salesData, loggedInUser]);
+  }, [salesPersonsList, salesData, loggedInUser]);
 
   // Camp sales data for Dashboard Today's Camps Sales Carousel
   const campCarouselItems = useMemo(() => {
