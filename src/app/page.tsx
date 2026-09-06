@@ -1655,26 +1655,53 @@ export default function SalesReportDashboard() {
     return Array.from(names).sort((a, b) => a.localeCompare(b));
   }, [companiesList, salesData]);
 
-  // Camp sales data for Dashboard Camps Carousel
+  // Camp sales data for Dashboard Today's Camps Sales Carousel
   const campCarouselItems = useMemo(() => {
-    if (summaryData?.camps && summaryData.camps.length > 0) {
-      return summaryData.camps.map((c) => {
+    // 1. If today's camp sales are present in summaryData comparison
+    if (summaryData?.comparison?.today?.camps && summaryData.comparison.today.camps.length > 0) {
+      return summaryData.comparison.today.camps.map((c) => {
+        let displayName = c.campName;
         if (c.campName.startsWith("router-") && campsList.length > 0) {
           const match = campsList.find(
             (camp) => camp.name === c.campName || camp.hotspot_name === c.campName || String(camp.id) === c.campName
           );
-          if (match) return { ...c, campName: match.name };
+          if (match) displayName = match.name;
         }
-        return c;
+        return {
+          campName: displayName,
+          salesCount: c.count || 0,
+          revenue: c.revenue || 0,
+        };
       });
     }
-    if (paymentCampData && paymentCampData.length > 0) {
-      return paymentCampData.map((c: any) => ({
-        campName: c.campName || "Camp",
-        salesCount: c.salesCount || 0,
-        revenue: c.totalAmount || 0,
+
+    // 2. If user is report_user and has allowed camps, list them with today's count (0 if no sales yet)
+    if (userType === "report_user" && allowedCamps && allowedCamps.length > 0) {
+      return allowedCamps.map((campName) => ({
+        campName,
+        salesCount: 0,
+        revenue: 0,
       }));
     }
+
+    // 3. Fallback to general camps list
+    if (summaryData?.camps && summaryData.camps.length > 0) {
+      return summaryData.camps.map((c) => {
+        let displayName = c.campName;
+        if (c.campName.startsWith("router-") && campsList.length > 0) {
+          const match = campsList.find(
+            (camp) => camp.name === c.campName || camp.hotspot_name === c.campName || String(camp.id) === c.campName
+          );
+          if (match) displayName = match.name;
+        }
+        return {
+          campName: displayName,
+          salesCount: c.salesCount || 0,
+          revenue: c.revenue || 0,
+        };
+      });
+    }
+
     if (campsList && campsList.length > 0) {
       return campsList.map((camp: any) => ({
         campName: camp.name || "Camp",
@@ -1682,15 +1709,9 @@ export default function SalesReportDashboard() {
         revenue: 0,
       }));
     }
-    if (campList && campList.length > 0) {
-      return campList.map((camp: string) => ({
-        campName: camp,
-        salesCount: 0,
-        revenue: 0,
-      }));
-    }
+
     return [];
-  }, [summaryData, paymentCampData, campsList, campList]);
+  }, [summaryData, userType, allowedCamps, campsList]);
 
   // Auto-slide effect for Camps Carousel
   useEffect(() => {
@@ -3707,7 +3728,7 @@ export default function SalesReportDashboard() {
                   <div className="text-xs uppercase font-bold tracking-widest pb-2 border-b border-white/20 flex justify-between items-center z-10">
                     <div className="flex items-center gap-1.5">
                       <Building2 className="h-4 w-4" />
-                      <span>Camps Sales</span>
+                      <span>Today Camps Sales</span>
                     </div>
 
                     {campCarouselItems.length > 1 && (
