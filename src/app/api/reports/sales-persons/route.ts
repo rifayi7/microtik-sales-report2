@@ -12,15 +12,13 @@ export async function GET(request: Request) {
         sp.username, 
         sp.display_name, 
         sp.role, 
-        sp.camp_name, 
-        sp.company_name, 
         sp.company_id, 
         sp.allowed_camps, 
         sp.allowed_router_ids,
         c.id as resolved_company_id, 
         c.name as resolved_company_name
       FROM sales_persons sp
-      LEFT JOIN companies c ON (sp.company_id IS NOT NULL AND c.id = sp.company_id) OR (sp.company_name IS NOT NULL AND LOWER(c.name) = LOWER(sp.company_name))
+      LEFT JOIN companies c ON sp.company_id IS NOT NULL AND c.id = sp.company_id
       ORDER BY sp.id ASC
     `;
     const result = await db.execute({ sql: query, args: [] });
