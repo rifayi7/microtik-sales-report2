@@ -24,6 +24,17 @@ export async function initializeDB() {
     );
   `);
 
+  // Create super_admins table for root platform administrators
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS super_admins (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT NOT NULL UNIQUE,
+      display_name TEXT NOT NULL,
+      password TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
   // Create companies table
   await db.execute(`
     CREATE TABLE IF NOT EXISTS companies (

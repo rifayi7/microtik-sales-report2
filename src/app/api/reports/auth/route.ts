@@ -13,30 +13,93 @@ export async function POST(request: Request) {
       const cleanUsername = String(username || "").trim();
       const cleanPassword = String(password || "").trim();
 
-      // 1. Check Super Admin Hardcoded / Master user
+      // 1. Check super_admins table
+      try {
+        const superRes = await db.execute({
+          sql: "SELECT id, username, display_name, password FROM super_admins WHERE LOWER(username) = LOWER(?) LIMIT 1",
+          args: [cleanUsername],
+        });
+
+        if (superRes.rows.length > 0) {
+          const row = superRes.rows[0];
+          const storedPassword = String(row.password || "");
+          const isPasswordValid = verifyPassword(cleanPassword, storedPassword);
+          if (!isPasswordValid) {
+            return NextResponse.json({ error: "Invalid username or password" }, { status: 400 });
+          }
+
+          if (needsRehash(storedPassword)) {
+            try {
+              const secureHash = hashPassword(cleanPassword);
+              await db.execute({
+                sql: "UPDATE super_admins SET password = ? WHERE id = ?",
+                args: [secureHash, Number(row.id)],
+              });
+            } catch (rehashErr) {
+              console.warn("Failed to upgrade super admin password hash:", rehashErr);
+            }
+          }
+
+          const user = {
+            id: Number(row.id),
+            userType: "superadmin" as const,
+            username: String(row.username),
+            displayName: String(row.display_name || "Super Administrator"),
+            companyId: null,
+            companyName: null,
+            allowedCamps: [] as string[],
+          };
+
+          const token = signJwt({
+            sub: user.username,
+            userId: user.id,
+            displayName: user.displayName,
+            role: "superadmin",
+            userType: "superadmin",
+            companyId: null,
+            companyName: null,
+            allowedCamps: [],
+          });
+
+          return NextResponse.json({
+            success: true,
+            ...user,
+            token,
+          });
+        }
+      } catch (e) {
+        console.warn("Notice checking super_admins:", e);
+      }
+
+      // Emergency Super Admin Failsafe (only if table empty)
       if (cleanUsername.toLowerCase() === "admin" && cleanPassword === "admin123") {
-        const user = {
-          userType: "superadmin" as const,
-          username: "admin",
-          displayName: "Super Administrator",
-          companyId: null,
-          companyName: null,
-          allowedCamps: [] as string[],
-        };
-        const token = signJwt({
-          sub: user.username,
-          displayName: user.displayName,
-          role: "superadmin",
-          userType: "superadmin",
-          companyId: null,
-          companyName: null,
-          allowedCamps: [],
-        });
-        return NextResponse.json({
-          success: true,
-          ...user,
-          token,
-        });
+        try {
+          const countRes = await db.execute("SELECT COUNT(*) as count FROM super_admins");
+          if (Number(countRes.rows[0]?.count ?? 0) === 0) {
+            const user = {
+              userType: "superadmin" as const,
+              username: "admin",
+              displayName: "Super Administrator",
+              companyId: null,
+              companyName: null,
+              allowedCamps: [] as string[],
+            };
+            const token = signJwt({
+              sub: user.username,
+              displayName: user.displayName,
+              role: "superadmin",
+              userType: "superadmin",
+              companyId: null,
+              companyName: null,
+              allowedCamps: [],
+            });
+            return NextResponse.json({
+              success: true,
+              ...user,
+              token,
+            });
+          }
+        } catch {}
       }
 
       // 2. Check company_admins table
@@ -402,7 +465,16 @@ export async function POST(request: Request) {
         console.warn("Error checking sales_persons in check-session:", e);
       }
 
-      // 4. Check superadmin users table
+      // 4. Check super_admins table
+      const superRes = await db.execute({
+        sql: "SELECT id FROM super_admins WHERE LOWER(username) = LOWER(?) LIMIT 1",
+        args: [cleanUsername],
+      });
+      if (superRes.rows.length > 0) {
+        return NextResponse.json({ valid: true });
+      }
+
+      // 5. Fallback check legacy users table
       const userRes = await db.execute({
         sql: "SELECT id FROM users WHERE LOWER(username) = LOWER(?) LIMIT 1",
         args: [cleanUsername],
@@ -415,6 +487,16 @@ export async function POST(request: Request) {
     }
 
     if (action === "change-password") {
+      const superUser = (await db.execute({ sql: "SELECT * FROM super_admins WHERE username = ?", args: [username] })).rows[0] as any;
+      if (superUser) {
+        if (!verifyPassword(currentPassword, String(superUser.password || ""))) {
+          return NextResponse.json({ error: "Current password is incorrect" }, { status: 400 });
+        }
+        const hashedNew = hashPassword(newPassword);
+        await db.execute({ sql: "UPDATE super_admins SET password = ? WHERE username = ?", args: [hashedNew, username] });
+        return NextResponse.json({ success: true });
+      }
+
       const user = (await db.execute({ sql: "SELECT * FROM users WHERE username = ?", args: [username] })).rows[0] as any;
       if (!user || !verifyPassword(currentPassword, String(user.password || ""))) {
         return NextResponse.json({ error: "Current password is incorrect" }, { status: 400 });
