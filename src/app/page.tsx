@@ -318,10 +318,10 @@ export default function SalesReportDashboard() {
   const [editPriceMap, setEditPriceMap] = useState<Record<number, string>>({});
 
   // Auth & Profile states
-  const [isLoggedIn, setIsLoggedIn] = useState(true);
-  const [loggedInUser, setLoggedInUser] = useState("admin");
-  const [userDisplayName, setUserDisplayName] = useState("Super Administrator");
-  const [userType, setUserType] = useState<"superadmin" | "report_user">("superadmin");
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [loggedInUser, setLoggedInUser] = useState("");
+  const [userDisplayName, setUserDisplayName] = useState("");
+  const [userType, setUserType] = useState<"superadmin" | "company_admin" | "report_user">("report_user");
   const [companyId, setCompanyId] = useState<number | null>(null);
   const [companyName, setCompanyName] = useState<string>("");
   const [allowedCamps, setAllowedCamps] = useState<string[]>([]);
@@ -369,13 +369,38 @@ export default function SalesReportDashboard() {
       if (savedSession) {
         const parsed = JSON.parse(savedSession);
         if (parsed?.username) {
-          setIsLoggedIn(true);
-          setLoggedInUser(parsed.username);
-          setUserDisplayName(parsed.displayName || parsed.username);
-          setUserType(parsed.userType || "superadmin");
-          setCompanyId(parsed.companyId ?? null);
-          setCompanyName(parsed.companyName || "");
-          setAllowedCamps(Array.isArray(parsed.allowedCamps) ? parsed.allowedCamps : []);
+          // Verify live session immediately against database
+          fetch("/api/reports/auth", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "check-session", username: parsed.username }),
+          })
+            .then((r) => r.json())
+            .then((data) => {
+              if (data && data.valid) {
+                setIsLoggedIn(true);
+                setLoggedInUser(parsed.username);
+                setUserDisplayName(parsed.displayName || parsed.username);
+                setUserType(parsed.userType || "superadmin");
+                setCompanyId(parsed.companyId ?? null);
+                setCompanyName(parsed.companyName || "");
+                setAllowedCamps(Array.isArray(parsed.allowedCamps) ? parsed.allowedCamps : []);
+              } else {
+                alert(data?.error || "Your account has been deactivated or company suspended.");
+                setIsLoggedIn(false);
+                try { localStorage.removeItem("linkfi_sales_user_session"); } catch {}
+              }
+            })
+            .catch(() => {
+              // Network fallback
+              setIsLoggedIn(true);
+              setLoggedInUser(parsed.username);
+              setUserDisplayName(parsed.displayName || parsed.username);
+              setUserType(parsed.userType || "superadmin");
+              setCompanyId(parsed.companyId ?? null);
+              setCompanyName(parsed.companyName || "");
+              setAllowedCamps(Array.isArray(parsed.allowedCamps) ? parsed.allowedCamps : []);
+            });
         }
       }
     } catch (e) {
@@ -398,6 +423,30 @@ export default function SalesReportDashboard() {
       .then(d => { if (d.success && Array.isArray(d.data)) setSalesPersonsList(d.data); })
       .catch(console.error);
   }, []);
+
+  // Periodic active session validator (polls every 15s when logged in)
+  useEffect(() => {
+    if (!isLoggedIn || !loggedInUser) return;
+
+    const interval = setInterval(() => {
+      fetch("/api/reports/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "check-session", username: loggedInUser }),
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          if (data && !data.valid) {
+            alert(data.error || "Your account access has been revoked or company suspended.");
+            setIsLoggedIn(false);
+            try { localStorage.removeItem("linkfi_sales_user_session"); } catch {}
+          }
+        })
+        .catch(() => {});
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, [isLoggedIn, loggedInUser]);
 
   // Sync Monthly Voucher Sales filter to startDate/endDate
   useEffect(() => {

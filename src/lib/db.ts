@@ -123,13 +123,34 @@ export async function initializeDB() {
   await db.execute(`
     CREATE TABLE IF NOT EXISTS notifications (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      camp_name TEXT NOT NULL,
-      user_name TEXT NOT NULL,
-      category TEXT NOT NULL,
+      camp_name TEXT,
+      user_name TEXT,
+      category TEXT,
+      title TEXT,
       message TEXT NOT NULL,
+      type TEXT DEFAULT 'info',
+      target_type TEXT DEFAULT 'ALL',
+      company_id INTEGER,
+      company_name TEXT,
+      created_by TEXT,
+      created_at TEXT,
+      expires_at TEXT,
       is_read INTEGER DEFAULT 0
     );
   `);
+
+  try { await db.execute("ALTER TABLE notifications ADD COLUMN camp_name TEXT;"); } catch {}
+  try { await db.execute("ALTER TABLE notifications ADD COLUMN user_name TEXT;"); } catch {}
+  try { await db.execute("ALTER TABLE notifications ADD COLUMN category TEXT;"); } catch {}
+  try { await db.execute("ALTER TABLE notifications ADD COLUMN title TEXT;"); } catch {}
+  try { await db.execute("ALTER TABLE notifications ADD COLUMN type TEXT DEFAULT 'info';"); } catch {}
+  try { await db.execute("ALTER TABLE notifications ADD COLUMN target_type TEXT DEFAULT 'ALL';"); } catch {}
+  try { await db.execute("ALTER TABLE notifications ADD COLUMN company_id INTEGER;"); } catch {}
+  try { await db.execute("ALTER TABLE notifications ADD COLUMN company_name TEXT;"); } catch {}
+  try { await db.execute("ALTER TABLE notifications ADD COLUMN created_by TEXT;"); } catch {}
+  try { await db.execute("ALTER TABLE notifications ADD COLUMN created_at TEXT;"); } catch {}
+  try { await db.execute("ALTER TABLE notifications ADD COLUMN expires_at TEXT;"); } catch {}
+  try { await db.execute("ALTER TABLE notifications ADD COLUMN is_read INTEGER DEFAULT 0;"); } catch {}
 
   // Create payments table
   await db.execute(`
