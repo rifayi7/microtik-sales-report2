@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDB } from "@/lib/db";
+import { buildWhereClauseAsync } from "@/lib/query-builder";
 
 export const runtime = "nodejs";
 
@@ -11,6 +12,8 @@ export async function GET(request: Request) {
     const endDate = url.searchParams.get("endDate");
     const search = url.searchParams.get("search");
     const camp = url.searchParams.get("camp");
+
+    const { effectiveAllowedCamps, isReportUserRestricted } = await buildWhereClauseAsync(url.searchParams, request);
 
     let conditions = ["v.status = 'redeemed'", "v.sold_by IS NOT NULL", "v.sold_by != ''"];
     let params: any[] = [];
@@ -28,9 +31,23 @@ export async function GET(request: Request) {
       params.push(camp);
     }
     if (search && search.trim() !== "") {
-      conditions.push("(v.sold_by LIKE ? OR CAST(v.price AS TEXT) LIKE ?)");
+      conditions.push("(v.sold_by LIKE ? OR CAST(v.price_charged AS TEXT) LIKE ?)");
       const likeParam = `%${search.trim()}%`;
       params.push(likeParam, likeParam);
+    }
+
+    if (isReportUserRestricted) {
+      if (effectiveAllowedCamps.length === 0) {
+        conditions.push("1 = 0");
+      } else {
+        const placeholders = effectiveAllowedCamps.map(() => "?").join(",");
+        conditions.push(`(
+          v.router_id IN (${placeholders})
+          OR v.router_id IN (SELECT id FROM routers WHERE camp IN (${placeholders}))
+          OR v.router_id IN (SELECT sessionName FROM routers WHERE camp IN (${placeholders}))
+        )`);
+        params.push(...effectiveAllowedCamps, ...effectiveAllowedCamps, ...effectiveAllowedCamps);
+      }
     }
 
     const whereClause = conditions.join(" AND ");

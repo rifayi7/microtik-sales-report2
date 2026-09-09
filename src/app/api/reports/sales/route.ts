@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDB } from "@/lib/db";
-import { buildWhereClause } from "@/lib/query-builder";
+import { buildWhereClauseAsync } from "@/lib/query-builder";
 
 export const runtime = "nodejs";
 
@@ -20,7 +20,7 @@ export async function GET(request: Request) {
   try {
     const db = await getDB();
     const url = new URL(request.url);
-    const { whereClause, params } = buildWhereClause(url.searchParams);
+    const { whereClause, params } = await buildWhereClauseAsync(url.searchParams, request);
 
     // Get pagination parameters
     const limit = url.searchParams.get("limit") ? Number(url.searchParams.get("limit")) : 50;

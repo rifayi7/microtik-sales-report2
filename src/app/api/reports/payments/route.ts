@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDB } from "@/lib/db";
+import { buildWhereClauseAsync } from "@/lib/query-builder";
 
 export const runtime = "nodejs";
 
@@ -13,6 +14,8 @@ export async function GET(request: Request) {
     const endDate = url.searchParams.get("endDate");
     const paidYearMonth = url.searchParams.get("paidYearMonth");
     const collectedOnly = url.searchParams.get("collectedOnly") === "true";
+
+    const { effectiveAllowedCamps, isReportUserRestricted } = await buildWhereClauseAsync(url.searchParams, request);
 
     let query = "SELECT * FROM payments";
     let conditions: string[] = [];
@@ -46,6 +49,16 @@ export async function GET(request: Request) {
 
     if (collectedOnly) {
       conditions.push("verified_status = 1");
+    }
+
+    if (isReportUserRestricted) {
+      if (effectiveAllowedCamps.length === 0) {
+        conditions.push("1 = 0");
+      } else {
+        const placeholders = effectiveAllowedCamps.map(() => "?").join(",");
+        conditions.push(`camp_name IN (${placeholders})`);
+        params.push(...effectiveAllowedCamps);
+      }
     }
 
     if (conditions.length > 0) {

@@ -1,49 +1,8 @@
 import { NextResponse } from "next/server";
 import { getDB } from "@/lib/db";
-import crypto from "crypto";
+import { verifyPassword, hashPassword, needsRehash, signJwt } from "@/lib/auth-crypto";
 
 export const runtime = "nodejs";
-
-function verifyPassword(password: string, storedHashOrPlain: string): boolean {
-  if (!storedHashOrPlain || !password) return false;
-
-  // 1. Verify scrypt hash (scrypt:salt:key)
-  if (storedHashOrPlain.startsWith("scrypt:")) {
-    try {
-      const parts = storedHashOrPlain.split(":");
-      if (parts.length !== 3) return false;
-      const [, salt, key] = parts;
-      const derivedKey = crypto.scryptSync(password, salt, 64);
-      const keyBuffer = Buffer.from(key, "hex");
-      return crypto.timingSafeEqual(derivedKey, keyBuffer);
-    } catch {
-      return false;
-    }
-  }
-
-  // 2. Verify sha256 with salt (sha256:salt:hash)
-  if (storedHashOrPlain.startsWith("sha256:")) {
-    try {
-      const parts = storedHashOrPlain.split(":");
-      if (parts.length === 3) {
-        const [, salt, hash] = parts;
-        const testHash = crypto.createHash("sha256").update(salt + password).digest("hex");
-        return testHash === hash;
-      }
-    } catch {
-      return false;
-    }
-  }
-
-  // 3. Verify plain sha256 hash (64 hex characters)
-  if (/^[a-f0-9]{64}$/i.test(storedHashOrPlain)) {
-    const directSha256 = crypto.createHash("sha256").update(password).digest("hex");
-    if (directSha256.toLowerCase() === storedHashOrPlain.toLowerCase()) return true;
-  }
-
-  // 4. Backwards-compatible legacy check for old plain-text entries
-  return password === storedHashOrPlain;
-}
 
 export async function POST(request: Request) {
   try {
@@ -54,16 +13,29 @@ export async function POST(request: Request) {
       const cleanUsername = String(username || "").trim();
       const cleanPassword = String(password || "").trim();
 
-      // 1. Check Super Admin Hardcoded / DB Master user
+      // 1. Check Super Admin Hardcoded / Master user
       if (cleanUsername.toLowerCase() === "admin" && cleanPassword === "admin123") {
-        return NextResponse.json({
-          success: true,
-          userType: "superadmin",
+        const user = {
+          userType: "superadmin" as const,
           username: "admin",
           displayName: "Super Administrator",
           companyId: null,
           companyName: null,
+          allowedCamps: [] as string[],
+        };
+        const token = signJwt({
+          sub: user.username,
+          displayName: user.displayName,
+          role: "superadmin",
+          userType: "superadmin",
+          companyId: null,
+          companyName: null,
           allowedCamps: [],
+        });
+        return NextResponse.json({
+          success: true,
+          ...user,
+          token,
         });
       }
 
@@ -85,7 +57,8 @@ export async function POST(request: Request) {
 
         if (adminRes.rows.length > 0) {
           const row = adminRes.rows[0];
-          const isPasswordValid = verifyPassword(cleanPassword, String(row.password || ""));
+          const storedPassword = String(row.password || "");
+          const isPasswordValid = verifyPassword(cleanPassword, storedPassword);
           if (!isPasswordValid) {
             return NextResponse.json({ error: "Invalid username or password" }, { status: 400 });
           }
@@ -95,18 +68,46 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: reason, isSuspended: true }, { status: 403 });
           }
 
+          if (needsRehash(storedPassword)) {
+            try {
+              const secureHash = hashPassword(cleanPassword);
+              await db.execute({
+                sql: "UPDATE company_admins SET password = ? WHERE id = ?",
+                args: [secureHash, Number(row.id)],
+              });
+            } catch (err) {
+              console.warn("Failed to upgrade password hash:", err);
+            }
+          }
+
           const resolvedCompanyId = row.resolved_company_id ? Number(row.resolved_company_id) : (row.company_id ? Number(row.company_id) : null);
           const compName = String(row.resolved_company_name || row.company_name || "");
 
-          return NextResponse.json({
-            success: true,
-            userType: "company_admin",
+          const user = {
             id: Number(row.id),
             username: String(row.username),
             displayName: compName ? `${compName} Admin` : "Company Admin",
+            userType: "company_admin" as const,
             companyId: resolvedCompanyId,
             companyName: compName,
+            allowedCamps: [] as string[],
+          };
+
+          const token = signJwt({
+            sub: user.username,
+            userId: user.id,
+            displayName: user.displayName,
+            role: "company_admin",
+            userType: "company_admin",
+            companyId: user.companyId,
+            companyName: user.companyName,
             allowedCamps: [],
+          });
+
+          return NextResponse.json({
+            success: true,
+            ...user,
+            token,
           });
         }
       } catch (e) {
@@ -132,8 +133,8 @@ export async function POST(request: Request) {
 
         if (repRes.rows.length > 0) {
           const row = repRes.rows[0];
-
-          const isPasswordValid = verifyPassword(cleanPassword, String(row.password || ""));
+          const storedPassword = String(row.password || "");
+          const isPasswordValid = verifyPassword(cleanPassword, storedPassword);
           if (!isPasswordValid) {
             return NextResponse.json({ error: "Invalid username or password" }, { status: 400 });
           }
@@ -147,6 +148,18 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: reason, isSuspended: true }, { status: 403 });
           }
 
+          if (needsRehash(storedPassword)) {
+            try {
+              const secureHash = hashPassword(cleanPassword);
+              await db.execute({
+                sql: "UPDATE report_users SET password = ? WHERE id = ?",
+                args: [secureHash, Number(row.id)],
+              });
+            } catch (err) {
+              console.warn("Failed to upgrade password hash:", err);
+            }
+          }
+
           let allowedCamps: string[] = [];
           if (row.allowed_camp_ids) {
             try {
@@ -156,15 +169,31 @@ export async function POST(request: Request) {
             }
           }
 
-          return NextResponse.json({
-            success: true,
-            userType: "report_user",
+          const user = {
             id: Number(row.id),
             username: String(row.username),
             displayName: String(row.display_name || row.username),
+            userType: "report_user" as const,
             companyId: row.company_id ? Number(row.company_id) : null,
             companyName: String(row.resolved_company_name || row.company_name || ""),
             allowedCamps,
+          };
+
+          const token = signJwt({
+            sub: user.username,
+            userId: user.id,
+            displayName: user.displayName,
+            role: "report_user",
+            userType: "report_user",
+            companyId: user.companyId,
+            companyName: user.companyName,
+            allowedCamps: user.allowedCamps,
+          });
+
+          return NextResponse.json({
+            success: true,
+            ...user,
+            token,
           });
         }
       } catch (e) {
@@ -189,7 +218,8 @@ export async function POST(request: Request) {
 
         if (spRes.rows.length > 0) {
           const row = spRes.rows[0];
-          const isPasswordValid = verifyPassword(cleanPassword, String(row.password || ""));
+          const storedPassword = String(row.password || "");
+          const isPasswordValid = verifyPassword(cleanPassword, storedPassword);
           if (!isPasswordValid) {
             return NextResponse.json({ error: "Invalid username or password" }, { status: 400 });
           }
@@ -197,6 +227,18 @@ export async function POST(request: Request) {
           if (row.company_status !== undefined && Number(row.company_status) === 0) {
             const reason = row.suspended_reason ? String(row.suspended_reason) : "Account suspended due to company dues.";
             return NextResponse.json({ error: reason, isSuspended: true }, { status: 403 });
+          }
+
+          if (needsRehash(storedPassword)) {
+            try {
+              const secureHash = hashPassword(cleanPassword);
+              await db.execute({
+                sql: "UPDATE sales_persons SET password = ? WHERE id = ?",
+                args: [secureHash, Number(row.id)],
+              });
+            } catch (err) {
+              console.warn("Failed to upgrade password hash:", err);
+            }
           }
 
           let allowedCamps: string[] = [];
@@ -208,15 +250,31 @@ export async function POST(request: Request) {
             }
           }
 
-          return NextResponse.json({
-            success: true,
-            userType: "report_user",
+          const user = {
             id: Number(row.id),
             username: String(row.username),
             displayName: String(row.display_name || row.username),
+            userType: "report_user" as const,
             companyId: row.company_id ? Number(row.company_id) : null,
             companyName: String(row.resolved_company_name || ""),
             allowedCamps,
+          };
+
+          const token = signJwt({
+            sub: user.username,
+            userId: user.id,
+            displayName: user.displayName,
+            role: "salesperson",
+            userType: "report_user",
+            companyId: user.companyId,
+            companyName: user.companyName,
+            allowedCamps: user.allowedCamps,
+          });
+
+          return NextResponse.json({
+            success: true,
+            ...user,
+            token,
           });
         }
       } catch (e) {
@@ -230,18 +288,31 @@ export async function POST(request: Request) {
       });
 
       if (userRes.rows.length > 0) {
-        const user = userRes.rows[0] as any;
-        const isUserPasswordValid = verifyPassword(cleanPassword, String(user.password || ""));
+        const userRow = userRes.rows[0] as any;
+        const isUserPasswordValid = verifyPassword(cleanPassword, String(userRow.password || ""));
 
         if (isUserPasswordValid) {
-          return NextResponse.json({
-            success: true,
-            userType: "superadmin",
-            username: String(user.username),
+          const user = {
+            userType: "superadmin" as const,
+            username: String(userRow.username),
             displayName: "Super Administrator",
             companyId: null,
             companyName: null,
+            allowedCamps: [] as string[],
+          };
+          const token = signJwt({
+            sub: user.username,
+            displayName: user.displayName,
+            role: "superadmin",
+            userType: "superadmin",
+            companyId: null,
+            companyName: null,
             allowedCamps: [],
+          });
+          return NextResponse.json({
+            success: true,
+            ...user,
+            token,
           });
         }
       }
@@ -348,7 +419,8 @@ export async function POST(request: Request) {
       if (!user || !verifyPassword(currentPassword, String(user.password || ""))) {
         return NextResponse.json({ error: "Current password is incorrect" }, { status: 400 });
       }
-      await db.execute({ sql: "UPDATE users SET password = ? WHERE username = ?", args: [newPassword, username] });
+      const hashedNew = hashPassword(newPassword);
+      await db.execute({ sql: "UPDATE users SET password = ? WHERE username = ?", args: [hashedNew, username] });
       return NextResponse.json({ success: true });
     }
 

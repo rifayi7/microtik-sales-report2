@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDB } from "@/lib/db";
+import { buildWhereClauseAsync } from "@/lib/query-builder";
 
 export const runtime = "nodejs";
 
@@ -12,12 +13,28 @@ export async function GET(request: Request) {
     const search = url.searchParams.get("search");
     const sortBy = url.searchParams.get("sortBy");
 
+    const { effectiveAllowedCamps, isReportUserRestricted } = await buildWhereClauseAsync(url.searchParams, request);
+
     let whereConditions = ["v.router_id IS NOT NULL", "v.router_id != ''"];
     let params: any[] = [];
 
     if (search && search.trim() !== "") {
       whereConditions.push("v.router_id LIKE ?");
       params.push(`%${search.trim()}%`);
+    }
+
+    if (isReportUserRestricted) {
+      if (effectiveAllowedCamps.length === 0) {
+        whereConditions.push("1 = 0");
+      } else {
+        const placeholders = effectiveAllowedCamps.map(() => "?").join(",");
+        whereConditions.push(`(
+          v.router_id IN (${placeholders})
+          OR v.router_id IN (SELECT id FROM routers WHERE camp IN (${placeholders}))
+          OR v.router_id IN (SELECT sessionName FROM routers WHERE camp IN (${placeholders}))
+        )`);
+        params.push(...effectiveAllowedCamps, ...effectiveAllowedCamps, ...effectiveAllowedCamps);
+      }
     }
 
     const whereClause = whereConditions.join(" AND ");

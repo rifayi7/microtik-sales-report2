@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDB } from "@/lib/db";
-import { buildWhereClause } from "@/lib/query-builder";
+import { buildWhereClauseAsync } from "@/lib/query-builder";
 
 export const runtime = "nodejs";
 
@@ -8,7 +8,12 @@ export async function GET(request: Request) {
   try {
     const db = await getDB();
     const url = new URL(request.url);
-    const { whereClause, params } = buildWhereClause(url.searchParams);
+    const { 
+      whereClause, 
+      params, 
+      effectiveAllowedCamps, 
+      isReportUserRestricted 
+    } = await buildWhereClauseAsync(url.searchParams, request);
 
     // 1. Get high-level summary (Total Sales, Total Revenue)
     const summarySql = `
@@ -123,35 +128,22 @@ export async function GET(request: Request) {
     let finalCamps = camps;
     let finalCompanies = companiesRes || [];
     
-    // Build base camp scoping for sub-queries
-    const userType = url.searchParams.get("userType");
-    const allowedCampsParam = url.searchParams.get("allowedCamps");
+    // Authoritative camp scoping for comparison cards
     let campScopeSql = "";
     const campScopeArgs: any[] = [];
     let isZeroAccess = false;
 
-    if (userType === "report_user") {
-      if (!allowedCampsParam || allowedCampsParam.trim() === "" || allowedCampsParam === "[]") {
+    if (isReportUserRestricted) {
+      if (effectiveAllowedCamps.length === 0) {
         isZeroAccess = true;
       } else {
-        let allowedCamps: string[] = [];
-        try {
-          allowedCamps = JSON.parse(allowedCampsParam);
-        } catch {
-          allowedCamps = allowedCampsParam.split(",").map(s => s.trim()).filter(Boolean);
-        }
-
-        if (allowedCamps.length === 0) {
-          isZeroAccess = true;
-        } else {
-          const placeholders = allowedCamps.map(() => "?").join(",");
-          campScopeSql = ` AND (
-            v.router_id IN (${placeholders})
-            OR v.router_id IN (SELECT id FROM routers WHERE camp IN (${placeholders}))
-            OR v.router_id IN (SELECT sessionName FROM routers WHERE camp IN (${placeholders}))
-          )`;
-          campScopeArgs.push(...allowedCamps, ...allowedCamps, ...allowedCamps);
-        }
+        const placeholders = effectiveAllowedCamps.map(() => "?").join(",");
+        campScopeSql = ` AND (
+          v.router_id IN (${placeholders})
+          OR v.router_id IN (SELECT id FROM routers WHERE camp IN (${placeholders}))
+          OR v.router_id IN (SELECT sessionName FROM routers WHERE camp IN (${placeholders}))
+        )`;
+        campScopeArgs.push(...effectiveAllowedCamps, ...effectiveAllowedCamps, ...effectiveAllowedCamps);
       }
     }
 
@@ -235,16 +227,10 @@ export async function GET(request: Request) {
 
       let paymentCampScopeSql = "";
       const paymentCampScopeArgs: any[] = [];
-      if (userType === "report_user" && campScopeArgs.length > 0) {
-        let allowedCamps: string[] = [];
-        try {
-          allowedCamps = JSON.parse(allowedCampsParam!);
-        } catch {
-          allowedCamps = allowedCampsParam!.split(",").map(s => s.trim()).filter(Boolean);
-        }
-        const placeholders = allowedCamps.map(() => "?").join(",");
+      if (isReportUserRestricted && effectiveAllowedCamps.length > 0) {
+        const placeholders = effectiveAllowedCamps.map(() => "?").join(",");
         paymentCampScopeSql = ` AND camp_name IN (${placeholders})`;
-        paymentCampScopeArgs.push(...allowedCamps);
+        paymentCampScopeArgs.push(...effectiveAllowedCamps);
       }
 
       const lastMonthCollectionSql = `
@@ -263,6 +249,8 @@ export async function GET(request: Request) {
       lastMonthSalesCount = lastMonthSalesRow?.count || 0;
       lastMonthSalesRevenue = lastMonthSalesRow?.revenue || 0;
       lastMonthCollectionCount = lastMonthCollectionRow?.count || 0;
+      lastMonthCollectionRevenue = lastMonthCollectionRow?.revenue || 0;
+
       // Today sales breakdown per camp
       const todayCampSql = `
         SELECT 
