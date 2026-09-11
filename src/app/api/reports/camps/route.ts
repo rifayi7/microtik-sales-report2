@@ -79,10 +79,40 @@ export async function POST(request: Request) {
         WHERE id = ?
       `, args: [name.trim(), company_name || null, hotspot_name || null, strength || 500, id] });
     } else {
+      const campNameTrimmed = name.trim();
+      const compNameTrimmed = company_name ? String(company_name).trim() : null;
+
       await db.execute({ sql: `
         INSERT INTO camps (name, company_name, hotspot_name, strength) 
         VALUES (?, ?, ?, ?)
-      `, args: [name.trim(), company_name || null, hotspot_name || null, strength || 500] });
+      `, args: [campNameTrimmed, compNameTrimmed, hotspot_name || null, strength || 500] });
+
+      // Auto-seed default 15-Days (16 AED) & 30-Days (32 AED) validity pricing plans for the new camp
+      try {
+        let compId: number | null = null;
+        if (compNameTrimmed) {
+          const compRow = await db.execute({
+            sql: "SELECT id FROM companies WHERE name = ? COLLATE NOCASE LIMIT 1",
+            args: [compNameTrimmed],
+          });
+          if (compRow.rows.length > 0 && compRow.rows[0].id) {
+            compId = Number(compRow.rows[0].id);
+          }
+        }
+
+        await db.batch([
+          {
+            sql: "INSERT OR IGNORE INTO camp_validity_pricing (company_id, router_id, validity, price, unit, status) VALUES (?, ?, ?, ?, ?, ?)",
+            args: [compId, campNameTrimmed, 15, 16, 0.5, 1],
+          },
+          {
+            sql: "INSERT OR IGNORE INTO camp_validity_pricing (company_id, router_id, validity, price, unit, status) VALUES (?, ?, ?, ?, ?, ?)",
+            args: [compId, campNameTrimmed, 30, 32, 1.0, 1],
+          },
+        ], "write");
+      } catch (seedErr) {
+        console.warn("Could not auto-seed camp_validity_pricing:", seedErr);
+      }
     }
 
     return NextResponse.json({ success: true });

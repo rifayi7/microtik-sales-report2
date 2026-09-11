@@ -70,65 +70,15 @@ export async function initializeDB() {
       validity_name TEXT NOT NULL,
       company_name TEXT,
       price REAL NOT NULL,
+      unit REAL DEFAULT 1.0,
       status INTEGER DEFAULT 1,
       UNIQUE(camp_name, validity_name)
     );
   `);
 
-  // Seed default companies
-  const checkCompanies = await db.execute("SELECT COUNT(*) as count FROM companies");
-  const compCount = Number(checkCompanies.rows[0]?.count ?? 0);
-  if (compCount === 0) {
-    await db.batch([
-      { sql: "INSERT OR IGNORE INTO companies (name) VALUES (?)", args: ["Apricom DXB"] },
-      { sql: "INSERT OR IGNORE INTO companies (name) VALUES (?)", args: ["Apricom KSA"] },
-    ], "write");
-  }
-
-  // Seed default camps
-  const checkCamps = await db.execute("SELECT COUNT(*) as count FROM camps");
-  const campsCount = Number(checkCamps.rows[0]?.count ?? 0);
-  if (campsCount === 0) {
-    await db.batch([
-      { sql: "INSERT OR IGNORE INTO camps (name, company_name, hotspot_name, strength) VALUES (?, ?, ?, ?)", args: ["APM-RIMAL-1", "Apricom KSA", "APM-RIMAL-1", 1000] },
-      { sql: "INSERT OR IGNORE INTO camps (name, company_name, hotspot_name, strength) VALUES (?, ?, ?, ?)", args: ["APM-DXB-camp-1", "Apricom DXB", "APM-DXB-camp-1", 500] },
-      { sql: "INSERT OR IGNORE INTO camps (name, company_name, hotspot_name, strength) VALUES (?, ?, ?, ?)", args: ["Hassani 3", "Apricom DXB", "Apricom-3", 500] },
-      { sql: "INSERT OR IGNORE INTO camps (name, company_name, hotspot_name, strength) VALUES (?, ?, ?, ?)", args: ["Hassani 2", "Apricom DXB", "Apricom-2", 500] },
-    ], "write");
-  }
-
-  // Seed default validity profiles
-  const checkVp = await db.execute("SELECT COUNT(*) as count FROM validity_profiles");
-  const vpCount = Number(checkVp.rows[0]?.count ?? 0);
-  if (vpCount === 0) {
-    const defaultVps = ["7-Days", "15-D", "30-D", "6-Days", "30-Days", "15-Days", "10-Days", "5-Days"];
-    await db.batch(
-      defaultVps.map(name => ({ sql: "INSERT OR IGNORE INTO validity_profiles (name) VALUES (?)", args: [name] })),
-      "write"
-    );
-  }
-
-  // Seed default camp validity pricing mapping
-  const checkCvp = await db.execute("SELECT COUNT(*) as count FROM camp_validity_pricing");
-  const cvpCount = Number(checkCvp.rows[0]?.count ?? 0);
-  if (cvpCount === 0) {
-    await db.batch([
-      { sql: "INSERT OR IGNORE INTO camp_validity_pricing (camp_name, validity_name, company_name, price, status) VALUES (?, ?, ?, ?, ?)", args: ["APM-RIMAL-1", "30-Days", "Apricom KSA", 30, 1] },
-      { sql: "INSERT OR IGNORE INTO camp_validity_pricing (camp_name, validity_name, company_name, price, status) VALUES (?, ?, ?, ?, ?)", args: ["APM-DXB-camp-1", "15-Days", "Apricom DXB", 16, 1] },
-      { sql: "INSERT OR IGNORE INTO camp_validity_pricing (camp_name, validity_name, company_name, price, status) VALUES (?, ?, ?, ?, ?)", args: ["APM-DXB-camp-1", "30-Days", "Apricom DXB", 32, 1] },
-      { sql: "INSERT OR IGNORE INTO camp_validity_pricing (camp_name, validity_name, company_name, price, status) VALUES (?, ?, ?, ?, ?)", args: ["KSAYSG-1", "15-D", "Apricom KSA", 25, 1] },
-      { sql: "INSERT OR IGNORE INTO camp_validity_pricing (camp_name, validity_name, company_name, price, status) VALUES (?, ?, ?, ?, ?)", args: ["KSAYSG-1", "30-D", "Apricom KSA", 40, 1] },
-      { sql: "INSERT OR IGNORE INTO camp_validity_pricing (camp_name, validity_name, company_name, price, status) VALUES (?, ?, ?, ?, ?)", args: ["APM-KSA-Wenz-1", "15-Days", "Apricom KSA", 20, 1] },
-      { sql: "INSERT OR IGNORE INTO camp_validity_pricing (camp_name, validity_name, company_name, price, status) VALUES (?, ?, ?, ?, ?)", args: ["APM-KSA-Wenz-1", "30-Days", "Apricom KSA", 30, 1] },
-      { sql: "INSERT OR IGNORE INTO camp_validity_pricing (camp_name, validity_name, company_name, price, status) VALUES (?, ?, ?, ?, ?)", args: ["APM-KSA-1", "7-Days", "Apricom KSA", 15, 1] },
-      { sql: "INSERT OR IGNORE INTO camp_validity_pricing (camp_name, validity_name, company_name, price, status) VALUES (?, ?, ?, ?, ?)", args: ["APM-Muzain-1", "15-Days", "Apricom KSA", 20, 0] },
-      { sql: "INSERT OR IGNORE INTO camp_validity_pricing (camp_name, validity_name, company_name, price, status) VALUES (?, ?, ?, ?, ?)", args: ["APM-Muzain-1", "30-Days", "Apricom KSA", 25, 0] },
-      { sql: "INSERT OR IGNORE INTO camp_validity_pricing (camp_name, validity_name, company_name, price, status) VALUES (?, ?, ?, ?, ?)", args: ["Hassani 3", "15-Days", "Apricom DXB", 16, 1] },
-      { sql: "INSERT OR IGNORE INTO camp_validity_pricing (camp_name, validity_name, company_name, price, status) VALUES (?, ?, ?, ?, ?)", args: ["Hassani 3", "30-Days", "Apricom DXB", 32, 1] },
-      { sql: "INSERT OR IGNORE INTO camp_validity_pricing (camp_name, validity_name, company_name, price, status) VALUES (?, ?, ?, ?, ?)", args: ["Hassani 2", "15-Days", "Apricom DXB", 16, 1] },
-      { sql: "INSERT OR IGNORE INTO camp_validity_pricing (camp_name, validity_name, company_name, price, status) VALUES (?, ?, ?, ?, ?)", args: ["Hassani 2", "30-Days", "Apricom DXB", 32, 1] },
-    ], "write");
-  }
+  try {
+    await db.execute("ALTER TABLE camp_validity_pricing ADD COLUMN unit REAL DEFAULT 1.0;");
+  } catch (e) {}
 
   // Create notifications table
   await db.execute(`

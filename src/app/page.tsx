@@ -148,6 +148,12 @@ const EXPENSE_CATEGORIES = ["Office Rent", "Router Purchase", "Fuel / Transporta
 const COMMON_CATEGORIES = ["Office Equipment", "Office Stationeries", "Repairs & Maintenance", "Team Outings"];
 const SUPPLIERS = ["Landlord Ltd", "Supplier XYZ", "Hardware Supplier A", "Gas Station", "Telcom Co"];
 
+const formatCount = (cnt: number | null | undefined): string => {
+  if (cnt === null || cnt === undefined || isNaN(Number(cnt))) return "0";
+  const num = Number(cnt);
+  return Number.isInteger(num) ? num.toString() : num.toFixed(1);
+};
+
 export default function SalesReportDashboard() {
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
   const [isMounted, setIsMounted] = useState(false);
@@ -1992,29 +1998,43 @@ export default function SalesReportDashboard() {
 
   // Camp sales data for Dashboard Today's Camps Sales Carousel
   const campCarouselItems = useMemo(() => {
+    // 1. Build today's camp sales map from summaryData.comparison.today.camps
+    const todayCampSalesMap = new Map<string, { count: number; revenue: number }>();
+    if (summaryData?.comparison?.today?.camps) {
+      for (const c of summaryData.comparison.today.camps) {
+        if (c.campName) {
+          todayCampSalesMap.set(c.campName.toLowerCase(), { count: c.count || 0, revenue: c.revenue || 0 });
+        }
+      }
+    }
+
+    const resolveDisplayName = (raw: string) => {
+      if (raw.startsWith("router-") && campsList.length > 0) {
+        const match = campsList.find(
+          (camp) => camp.name === raw || camp.hotspot_name === raw || String(camp.id) === raw
+        );
+        if (match) return match.name;
+      }
+      return raw;
+    };
+
+    const getCampSales = (key: string, altKey?: string, altKey2?: string) => {
+      const k1 = key.toLowerCase();
+      if (todayCampSalesMap.has(k1)) return todayCampSalesMap.get(k1)!;
+      if (altKey && todayCampSalesMap.has(altKey.toLowerCase())) return todayCampSalesMap.get(altKey.toLowerCase())!;
+      if (altKey2 && todayCampSalesMap.has(altKey2.toLowerCase())) return todayCampSalesMap.get(altKey2.toLowerCase())!;
+      return { count: 0, revenue: 0 };
+    };
+
     // 1. If user is a restricted report_user
     if (userType === "report_user") {
       if (!allowedCamps || allowedCamps.length === 0) {
         return [];
       }
 
-      // Map each allowed camp to its today's sales if present, or 0
-      const todayCampSalesMap = new Map<string, { count: number; revenue: number }>();
-      if (summaryData?.comparison?.today?.camps) {
-        for (const c of summaryData.comparison.today.camps) {
-          todayCampSalesMap.set(c.campName, { count: c.count || 0, revenue: c.revenue || 0 });
-        }
-      }
-
       return allowedCamps.map((campName) => {
-        let displayName = campName;
-        if (campName.startsWith("router-") && campsList.length > 0) {
-          const match = campsList.find(
-            (camp) => camp.name === campName || camp.hotspot_name === campName || String(camp.id) === campName
-          );
-          if (match) displayName = match.name;
-        }
-        const sales = todayCampSalesMap.get(campName) || { count: 0, revenue: 0 };
+        const displayName = resolveDisplayName(campName);
+        const sales = getCampSales(campName, displayName);
         return {
           campName: displayName,
           salesCount: sales.count,
@@ -2038,19 +2058,9 @@ export default function SalesReportDashboard() {
         return [];
       }
 
-      const todayCampSalesMap = new Map<string, { count: number; revenue: number }>();
-      if (summaryData?.comparison?.today?.camps) {
-        for (const c of summaryData.comparison.today.camps) {
-          todayCampSalesMap.set(c.campName, { count: c.count || 0, revenue: c.revenue || 0 });
-        }
-      }
-
       return filteredCompanyCamps.map((camp: any) => {
         const campName = camp.name || "Camp";
-        const sales = todayCampSalesMap.get(campName) || 
-                      todayCampSalesMap.get(camp.hotspot_name) || 
-                      todayCampSalesMap.get(String(camp.id)) || 
-                      { count: 0, revenue: 0 };
+        const sales = getCampSales(campName, camp.hotspot_name, String(camp.id));
         return {
           campName,
           salesCount: sales.count,
@@ -2059,49 +2069,32 @@ export default function SalesReportDashboard() {
       });
     }
 
-    // 3. For superadmin only:
-    if (userType === "superadmin") {
-      if (summaryData?.comparison?.today?.camps && summaryData.comparison.today.camps.length > 0) {
-        return summaryData.comparison.today.camps.map((c) => {
-          let displayName = c.campName;
-          if (c.campName.startsWith("router-") && campsList.length > 0) {
-            const match = campsList.find(
-              (camp) => camp.name === c.campName || camp.hotspot_name === c.campName || String(camp.id) === c.campName
-            );
-            if (match) displayName = match.name;
-          }
-          return {
-            campName: displayName,
-            salesCount: c.count || 0,
-            revenue: c.revenue || 0,
-          };
-        });
-      }
+    // 3. For superadmin (or unrestricted access)
+    // Priority A: If summaryData has today's camps sales, display them
+    if (summaryData?.comparison?.today?.camps && summaryData.comparison.today.camps.length > 0) {
+      return summaryData.comparison.today.camps.map((c) => ({
+        campName: resolveDisplayName(c.campName),
+        salesCount: c.count || 0,
+        revenue: c.revenue || 0,
+      }));
+    }
 
-      if (summaryData?.camps && summaryData.camps.length > 0) {
-        return summaryData.camps.map((c) => {
-          let displayName = c.campName;
-          if (c.campName.startsWith("router-") && campsList.length > 0) {
-            const match = campsList.find(
-              (camp) => camp.name === c.campName || camp.hotspot_name === c.campName || String(camp.id) === c.campName
-            );
-            if (match) displayName = match.name;
-          }
-          return {
-            campName: displayName,
-            salesCount: c.salesCount || 0,
-            revenue: c.revenue || 0,
-          };
-        });
-      }
+    // Priority B: If overall camps are present in summaryData
+    if (summaryData?.camps && summaryData.camps.length > 0) {
+      return summaryData.camps.map((c) => ({
+        campName: resolveDisplayName(c.campName),
+        salesCount: c.salesCount || 0,
+        revenue: c.revenue || 0,
+      }));
+    }
 
-      if (campsList && campsList.length > 0) {
-        return campsList.map((camp: any) => ({
-          campName: camp.name || "Camp",
-          salesCount: 0,
-          revenue: 0,
-        }));
-      }
+    // Priority C: Camps master list
+    if (campsList && campsList.length > 0) {
+      return campsList.map((camp: any) => ({
+        campName: camp.name || "Camp",
+        salesCount: 0,
+        revenue: 0,
+      }));
     }
 
     return [];
@@ -4120,7 +4113,7 @@ export default function SalesReportDashboard() {
                   <div className="text-right">
                     <span className="text-[10px] font-bold opacity-80 block uppercase">Total Sales</span>
                     <span className="text-lg sm:text-xl font-black bg-white/20 px-2 py-0.5 rounded">
-                      {summaryData?.summary.totalSales.toLocaleString() || "0"}
+                      {formatCount(summaryData?.summary.totalSales)}
                     </span>
                   </div>
                 </div>
@@ -4174,7 +4167,7 @@ export default function SalesReportDashboard() {
                     <span className="text-[9px] uppercase font-bold opacity-75 block">Total Count</span>
                     <div className="flex items-baseline gap-1 justify-end">
                       <span className="text-xl sm:text-2xl font-black tracking-tight leading-none bg-white/20 px-2 py-0.5 rounded">
-                        {summaryData?.comparison.today.sales || "0"}
+                        {formatCount(summaryData?.comparison.today.sales)}
                       </span>
                     </div>
                   </div>
@@ -4188,10 +4181,10 @@ export default function SalesReportDashboard() {
                         <span 
                           key={c.campName} 
                           className="bg-black/20 hover:bg-black/30 backdrop-blur-sm px-2 py-0.5 rounded text-[9px] font-bold flex items-center gap-1 transition-all"
-                          title={`${c.campName}: ${c.count} vouchers sold (AED ${c.revenue})`}
+                          title={`${c.campName}: ${formatCount(c.count)} vouchers sold (AED ${c.revenue})`}
                         >
                           <span className="truncate max-w-[90px]">{c.campName}:</span>
-                          <span className="bg-white/30 text-white font-black px-1 rounded text-[8px]">{c.count}</span>
+                          <span className="bg-white/30 text-white font-black px-1 rounded text-[8px]">{formatCount(c.count)}</span>
                         </span>
                       ))}
                     </div>
@@ -4320,12 +4313,12 @@ export default function SalesReportDashboard() {
                         
                         {/* Previous Count */}
                         <div className="col-span-2 text-right font-semibold text-slate-400 text-[11px]">
-                          {Math.round(comp.salesCount * 0.9) || 0}
+                          {formatCount(Math.round(comp.salesCount * 0.9 * 10) / 10)}
                         </div>
                         
                         {/* Sales Count */}
                         <div className="col-span-2 text-right font-extrabold text-slate-700 text-[11px]">
-                          {comp.salesCount}
+                          {formatCount(comp.salesCount)}
                         </div>
                         
                         {/* Sale Amount */}
@@ -4424,7 +4417,7 @@ export default function SalesReportDashboard() {
                       </div>
                       
                       <div className="text-xs font-semibold mt-1.5 opacity-90 flex items-center gap-2">
-                        <span>Vouchers Count: <span className="font-black">{campCarouselItems[campCarouselIndex]?.salesCount || 0}</span></span>
+                        <span>Vouchers Count: <span className="font-black">{formatCount(campCarouselItems[campCarouselIndex]?.salesCount)}</span></span>
                       </div>
                     </div>
                   ) : (
@@ -4473,7 +4466,7 @@ export default function SalesReportDashboard() {
                     <div>
                       <span className="text-[10px] opacity-75 font-semibold uppercase block">Count</span>
                       <span className="text-base font-bold">
-                        {Number(summaryData?.comparison?.thisMonth?.sales ?? summaryData?.summary?.totalSales ?? 0).toLocaleString()} vouchers
+                        {formatCount(summaryData?.comparison?.thisMonth?.sales ?? summaryData?.summary?.totalSales ?? 0)} vouchers
                       </span>
                     </div>
                   </div>
@@ -4509,7 +4502,7 @@ export default function SalesReportDashboard() {
                     <div>
                       <span className="text-[10px] opacity-75 font-semibold uppercase block">Sale Count</span>
                       <span className="text-base font-bold">
-                        {Number(summaryData?.lastMonth?.sales?.count || 0).toLocaleString()} vouchers
+                        {formatCount(summaryData?.lastMonth?.sales?.count || 0)} vouchers
                       </span>
                     </div>
                   </div>
