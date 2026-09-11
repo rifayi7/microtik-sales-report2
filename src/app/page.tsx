@@ -88,6 +88,11 @@ interface SummaryData {
   lastMonth?: {
     sales: { count: number; revenue: number };
     collection: { count: number; revenue: number };
+    expense?: { amount: number };
+  };
+  expenses?: {
+    today: number;
+    thisMonth: number;
   };
   agents: { name: string; salesCount: number; revenue: number }[];
   camps?: { campName: string; salesCount: number; revenue: number }[];
@@ -170,7 +175,17 @@ export default function SalesReportDashboard() {
   const [entriesLimit, setEntriesLimit] = useState(100);
   
   // Dashboard Monthly Analysis Specific States
-  const [dashboardAnalysisMonth, setDashboardAnalysisMonth] = useState("");
+  const [dashboardAnalysisMonth, setDashboardAnalysisMonth] = useState(() => {
+    const now = new Date();
+    const dubai = new Date(now.getTime() + 4 * 3600 * 1000);
+    return `${dubai.getUTCFullYear()}-${String(dubai.getUTCMonth() + 1).padStart(2, "0")}`;
+  });
+  const [monthlyCampAnalysis, setMonthlyCampAnalysis] = useState<{
+    currentMonth: { campName: string; salesCount: number; revenue: number }[];
+    previousMonth: { campName: string; salesCount: number; revenue: number }[];
+    previousMonthKey: string;
+  } | null>(null);
+  const [loadingMonthlyCampAnalysis, setLoadingMonthlyCampAnalysis] = useState(false);
   
   // Tab 2: Monthly Voucher Sales Specific States
   const [selectedMonth, setSelectedMonth] = useState(() => {
@@ -376,17 +391,16 @@ export default function SalesReportDashboard() {
       if (savedSession) {
         const parsed = JSON.parse(savedSession);
         if (parsed?.username) {
-          // Immediately set logged-in state so there is NO momentary login page flash on reload
-          setIsLoggedIn(true);
+          // Keep isAuthChecking(true) and wait for server validation before rendering dashboard
+          setIsAuthChecking(true);
           setLoggedInUser(parsed.username);
           setUserDisplayName(parsed.displayName || parsed.username);
           setUserType(parsed.userType || "superadmin");
           setCompanyId(parsed.companyId ?? null);
           setCompanyName(parsed.companyName || "");
           setAllowedCamps(Array.isArray(parsed.allowedCamps) ? parsed.allowedCamps : []);
-          setIsAuthChecking(false);
 
-          // Verify live session immediately against database in the background
+          // Verify live session immediately against database
           fetch("/api/reports/auth", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -400,16 +414,19 @@ export default function SalesReportDashboard() {
                   setAllowedCamps(Array.isArray(data.allowedCamps) ? data.allowedCamps : []);
                 }
               } else {
-                alert(data?.error || "Your account has been deactivated or company suspended.");
                 setIsLoggedIn(false);
                 try { 
                   localStorage.removeItem("linkfi_sales_user_session"); 
                   localStorage.removeItem("linkfi_sales_auth_token");
                 } catch {}
+                setAuthError(data?.error || "Your account has been paused by the administrator. Access is disabled until resumed.");
               }
+              setIsAuthChecking(false);
             })
             .catch(() => {
               // Network fallback: retain local session
+              setIsLoggedIn(true);
+              setIsAuthChecking(false);
             });
         } else {
           setIsAuthChecking(false);
@@ -442,7 +459,7 @@ export default function SalesReportDashboard() {
       .catch(console.error);
   }, []);
 
-  // Periodic active session validator (polls every 15s when logged in)
+  // Periodic active session validator (polls every 5s when logged in for immediate pause detection)
   useEffect(() => {
     if (!isLoggedIn || !loggedInUser) return;
 
@@ -455,13 +472,18 @@ export default function SalesReportDashboard() {
         .then((r) => r.json())
         .then((data) => {
           if (data && !data.valid) {
-            alert(data.error || "Your account access has been revoked or company suspended.");
             setIsLoggedIn(false);
-            try { localStorage.removeItem("linkfi_sales_user_session"); } catch {}
+            setIsAuthChecking(false);
+            setIsProfileDropdownOpen(false);
+            try { 
+              localStorage.removeItem("linkfi_sales_user_session"); 
+              localStorage.removeItem("linkfi_sales_auth_token");
+            } catch {}
+            setAuthError(data.error || "Your account has been paused by the administrator. Access is disabled until resumed.");
           }
         })
         .catch(() => {});
-    }, 15000);
+    }, 5000);
 
     return () => clearInterval(interval);
   }, [isLoggedIn, loggedInUser]);
@@ -481,21 +503,28 @@ export default function SalesReportDashboard() {
   // Sync Camps - Monthly Voucher Sales Chart filter to startDate/endDate
   useEffect(() => {
     if (activeTab === "sales-chart" && startMonthDay) {
-      setStartDate(startMonthDay);
-      const start = new Date(startMonthDay);
-      if (!isNaN(start.getTime())) {
-        const targetYear = start.getFullYear();
-        const targetMonth = start.getMonth() + noOfMonths;
-        const targetDay = parseInt(endDayRange);
-        
-        const end = new Date(targetYear, targetMonth, targetDay);
-        const year = end.getFullYear();
-        const month = String(end.getMonth() + 1).padStart(2, "0");
-        const day = String(end.getDate()).padStart(2, "0");
-        setEndDate(`${year}-${month}-${day}`);
+      const d = new Date(startMonthDay);
+      if (!isNaN(d.getTime())) {
+        const monthsCount = Math.max(1, Number(noOfMonths) || 1);
+        const sYear = d.getFullYear();
+        const sMonth = d.getMonth();
+        const startTarget = new Date(sYear, sMonth - (monthsCount - 1), 1);
+        const startStr = `${startTarget.getFullYear()}-${String(startTarget.getMonth() + 1).padStart(2, "0")}-01`;
+        const endLastDay = new Date(sYear, sMonth + 1, 0).getDate();
+        const endStr = `${sYear}-${String(sMonth + 1).padStart(2, "0")}-${String(endLastDay).padStart(2, "0")}`;
+        setStartDate(startStr);
+        setEndDate(endStr);
       }
     }
   }, [startMonthDay, endDayRange, noOfMonths, activeTab]);
+
+  // Re-fetch monthly camp analysis when the analysis month picker changes
+  useEffect(() => {
+    if (dashboardAnalysisMonth && isMounted && isLoggedIn) {
+      fetchMonthlyCampAnalysis(dashboardAnalysisMonth);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dashboardAnalysisMonth, isMounted, isLoggedIn]);
 
   // Close dropdowns on clicking anywhere
   useEffect(() => {
@@ -606,6 +635,21 @@ export default function SalesReportDashboard() {
     }
   };
 
+  const checkResponseForPause = (res: Response, data: any): boolean => {
+    if (res.status === 403 && (data?.isPaused || data?.error?.includes("ACCOUNT_PAUSED") || data?.error?.toLowerCase().includes("paused"))) {
+      setIsLoggedIn(false);
+      setIsAuthChecking(false);
+      setIsProfileDropdownOpen(false);
+      try {
+        localStorage.removeItem("linkfi_sales_user_session");
+        localStorage.removeItem("linkfi_sales_auth_token");
+      } catch {}
+      setAuthError(data?.error || "Your account has been paused by the administrator. Access is disabled until resumed.");
+      return true;
+    }
+    return false;
+  };
+
   // Fetch summary stats
   const fetchSummary = async () => {
     if (!isMounted) return;
@@ -656,6 +700,7 @@ export default function SalesReportDashboard() {
         }
       });
       const data = await res.json();
+      if (checkResponseForPause(res, data)) return;
       if (data.success) {
         setSummaryData(data);
       }
@@ -663,6 +708,37 @@ export default function SalesReportDashboard() {
       console.error("Error fetching summary stats:", err);
     } finally {
       setLoadingSummary(false);
+    }
+  };
+
+  // Fetch per-camp sales for selected month + previous month (for Dashboard Monthly Analysis panel)
+  const fetchMonthlyCampAnalysis = async (month?: string) => {
+    if (!isMounted) return;
+    const targetMonth = month || dashboardAnalysisMonth;
+    if (!targetMonth) return;
+    setLoadingMonthlyCampAnalysis(true);
+    try {
+      const params = new URLSearchParams();
+      params.append("analysisMonth", targetMonth);
+      if (userType) params.append("userType", userType);
+      if (loggedInUser) params.append("username", loggedInUser);
+      const authToken = typeof window !== "undefined" ? localStorage.getItem("linkfi_sales_auth_token") : null;
+      const res = await fetch(`/api/reports/monthly-camp-analysis?${params.toString()}`, {
+        headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+      });
+      const data = await res.json();
+      if (checkResponseForPause(res, data)) return;
+      if (data.success) {
+        setMonthlyCampAnalysis({
+          currentMonth: data.currentMonth || [],
+          previousMonth: data.previousMonth || [],
+          previousMonthKey: data.previousMonthKey || "",
+        });
+      }
+    } catch (err) {
+      console.error("Error fetching monthly camp analysis:", err);
+    } finally {
+      setLoadingMonthlyCampAnalysis(false);
     }
   };
 
@@ -719,6 +795,7 @@ export default function SalesReportDashboard() {
         }
       });
       const data = await res.json();
+      if (checkResponseForPause(res, data)) return;
       if (data.success) {
         setSalesData(data);
         setSalesPage(page);
@@ -1444,6 +1521,7 @@ export default function SalesReportDashboard() {
       fetchSummary();
       fetchSales(1);
       fetchCamps();
+      fetchMonthlyCampAnalysis();
     } else if (activeTab === "voucher-sales") {
       fetchSales(1);
       fetchCamps();
@@ -1518,6 +1596,7 @@ export default function SalesReportDashboard() {
     expenseCompanyFilter,
     expenseCategoryFilter,
     selectedMonth,
+    dashboardAnalysisMonth,
     startMonthDay,
     endDayRange,
     noOfMonths,
@@ -1527,6 +1606,16 @@ export default function SalesReportDashboard() {
     allowedCamps,
     isMounted
   ]);
+
+  // Periodic live refresh every 60 seconds when on Dashboard
+  useEffect(() => {
+    if (!isMounted || activeTab !== "dashboard") return;
+    const interval = setInterval(() => {
+      fetchSummary();
+      fetchMonthlyCampAnalysis();
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [isMounted, activeTab, dashboardAnalysisMonth]);
 
 
 
@@ -1807,7 +1896,16 @@ export default function SalesReportDashboard() {
         const monthIdx = dubai.getUTCMonth();
         const orderKey = `${year}-${String(monthIdx + 1).padStart(2, "0")}`;
 
-        const resolvedCamp = (sale.campName || sale.routerId || "Other").trim();
+        const rawCamp = (sale.campName || sale.routerId || "Other").trim();
+        let resolvedCamp = rawCamp;
+        if (campsList && campsList.length > 0) {
+          const match = campsList.find((c: any) =>
+            c.name?.toLowerCase() === rawCamp.toLowerCase() ||
+            c.hotspot_name?.toLowerCase() === rawCamp.toLowerCase() ||
+            String(c.id) === rawCamp
+          );
+          if (match?.name) resolvedCamp = match.name;
+        }
         allCampsSet.add(resolvedCamp);
 
         if (monthGroups[orderKey]) {
@@ -1835,7 +1933,7 @@ export default function SalesReportDashboard() {
       });
 
     return { campChartData: sortedData, activeCampsInChart: activeCamps };
-  }, [salesData, endDayRange, startMonthDay, noOfMonths, allowedCamps]);
+  }, [salesData, endDayRange, startMonthDay, noOfMonths, allowedCamps, campsList]);
 
   // Dynamic variables definition
   const campColors = COLORS;
@@ -1913,7 +2011,7 @@ export default function SalesReportDashboard() {
     // If report_user, strictly restrict to allowedCamps
     if (userType === "report_user") {
       if (allowedCamps && allowedCamps.length > 0) {
-        result = result.filter((c) => allowedCamps.includes(c));
+        result = result.filter((c) => allowedCamps.some((ac: string) => ac.toLowerCase() === c.toLowerCase()));
       } else {
         result = [];
       }
@@ -1997,108 +2095,102 @@ export default function SalesReportDashboard() {
   }, [salesPersonsList, salesData, loggedInUser]);
 
   // Camp sales data for Dashboard Today's Camps Sales Carousel
+  // Strictly includes only camps that had sales today (> 0) within allowed/authorized camps
   const campCarouselItems = useMemo(() => {
-    // 1. Build today's camp sales map from summaryData.comparison.today.camps
-    const todayCampSalesMap = new Map<string, { count: number; revenue: number }>();
-    if (summaryData?.comparison?.today?.camps) {
-      for (const c of summaryData.comparison.today.camps) {
-        if (c.campName) {
-          todayCampSalesMap.set(c.campName.toLowerCase(), { count: c.count || 0, revenue: c.revenue || 0 });
-        }
-      }
-    }
+    const todayCamps = summaryData?.comparison?.today?.camps || [];
+    if (todayCamps.length === 0) return [];
 
-    const resolveDisplayName = (raw: string) => {
-      if (raw.startsWith("router-") && campsList.length > 0) {
-        const match = campsList.find(
-          (camp) => camp.name === raw || camp.hotspot_name === raw || String(camp.id) === raw
+    // Helper: resolve clean display name from campsList if possible
+    const resolveDisplayName = (raw: string): string => {
+      if (!raw) return "Camp";
+      if (campsList.length > 0) {
+        const match = campsList.find((camp: any) =>
+          camp.name?.toLowerCase() === raw.toLowerCase() ||
+          camp.hotspot_name?.toLowerCase() === raw.toLowerCase() ||
+          String(camp.id) === raw
         );
-        if (match) return match.name;
+        if (match?.name) return match.name;
       }
       return raw;
     };
 
-    const getCampSales = (key: string, altKey?: string, altKey2?: string) => {
-      const k1 = key.toLowerCase();
-      if (todayCampSalesMap.has(k1)) return todayCampSalesMap.get(k1)!;
-      if (altKey && todayCampSalesMap.has(altKey.toLowerCase())) return todayCampSalesMap.get(altKey.toLowerCase())!;
-      if (altKey2 && todayCampSalesMap.has(altKey2.toLowerCase())) return todayCampSalesMap.get(altKey2.toLowerCase())!;
-      return { count: 0, revenue: 0 };
+    // Helper: check if a campName / routerId is permitted for report_user
+    const isAllowedForReportUser = (rawCampName: string): boolean => {
+      if (!allowedCamps || allowedCamps.length === 0) return false;
+      const lowerRaw = rawCampName.toLowerCase();
+      // Direct match
+      if (allowedCamps.some((ac: string) => ac.toLowerCase() === lowerRaw)) return true;
+      // Check via campsList match
+      if (campsList.length > 0) {
+        const campObj = campsList.find((c: any) =>
+          c.name?.toLowerCase() === lowerRaw ||
+          c.hotspot_name?.toLowerCase() === lowerRaw ||
+          String(c.id) === rawCampName
+        );
+        if (campObj) {
+          if (campObj.name && allowedCamps.some((ac: string) => ac.toLowerCase() === campObj.name.toLowerCase())) return true;
+          if (campObj.hotspot_name && allowedCamps.some((ac: string) => ac.toLowerCase() === campObj.hotspot_name.toLowerCase())) return true;
+          if (allowedCamps.some((ac: string) => ac === String(campObj.id))) return true;
+        }
+      }
+      return false;
     };
 
-    // 1. If user is a restricted report_user
-    if (userType === "report_user") {
-      if (!allowedCamps || allowedCamps.length === 0) {
-        return [];
+    // Helper: check if a camp belongs to company for company_admin
+    const isAllowedForCompanyAdmin = (rawCampName: string): boolean => {
+      if (!companyId && !companyName) return true;
+      const lowerRaw = rawCampName.toLowerCase();
+      const campObj = campsList.find((c: any) =>
+        c.name?.toLowerCase() === lowerRaw ||
+        c.hotspot_name?.toLowerCase() === lowerRaw ||
+        String(c.id) === rawCampName
+      );
+      if (campObj) {
+        const idMatch = companyId && (Number(campObj.company_id) === Number(companyId) || Number(campObj.resolved_company_id) === Number(companyId));
+        const nameMatch = companyName && campObj.company_name?.toLowerCase() === companyName.toLowerCase();
+        return Boolean(idMatch || nameMatch);
+      }
+      return true;
+    };
+
+    // Filter and aggregate today's sales for camps that had sales today
+    const campMap = new Map<string, { campName: string; salesCount: number; revenue: number }>();
+
+    for (const c of todayCamps) {
+      if (!c.campName) continue;
+      const count = Number(c.count || 0);
+      const revenue = Number(c.revenue || 0);
+
+      // Only include if sale actually happened today
+      if (count <= 0 && revenue <= 0) continue;
+
+      // Check scoping
+      if (userType === "report_user" && !isAllowedForReportUser(c.campName)) {
+        continue;
+      }
+      if (userType === "company_admin" && !isAllowedForCompanyAdmin(c.campName)) {
+        continue;
       }
 
-      return allowedCamps.map((campName) => {
-        const displayName = resolveDisplayName(campName);
-        const sales = getCampSales(campName, displayName);
-        return {
-          campName: displayName,
-          salesCount: sales.count,
-          revenue: sales.revenue,
-        };
-      });
-    }
+      const displayName = resolveDisplayName(c.campName);
+      const key = displayName.toLowerCase();
 
-    // 2. If user is a company_admin (scope strictly to their company camps)
-    if (userType === "company_admin") {
-      let filteredCompanyCamps: any[] = [];
-      if (campsList && campsList.length > 0) {
-        filteredCompanyCamps = campsList.filter((c: any) => {
-          const idMatch = companyId && (Number(c.company_id) === Number(companyId) || Number(c.resolved_company_id) === Number(companyId));
-          const nameMatch = companyName && c.company_name && c.company_name.toLowerCase() === companyName.toLowerCase();
-          return idMatch || nameMatch;
+      if (campMap.has(key)) {
+        const existing = campMap.get(key)!;
+        existing.salesCount += count;
+        existing.revenue += revenue;
+      } else {
+        campMap.set(key, {
+          campName: displayName,
+          salesCount: count,
+          revenue: revenue,
         });
       }
-
-      if (filteredCompanyCamps.length === 0) {
-        return [];
-      }
-
-      return filteredCompanyCamps.map((camp: any) => {
-        const campName = camp.name || "Camp";
-        const sales = getCampSales(campName, camp.hotspot_name, String(camp.id));
-        return {
-          campName,
-          salesCount: sales.count,
-          revenue: sales.revenue,
-        };
-      });
     }
 
-    // 3. For superadmin (or unrestricted access)
-    // Priority A: If summaryData has today's camps sales, display them
-    if (summaryData?.comparison?.today?.camps && summaryData.comparison.today.camps.length > 0) {
-      return summaryData.comparison.today.camps.map((c) => ({
-        campName: resolveDisplayName(c.campName),
-        salesCount: c.count || 0,
-        revenue: c.revenue || 0,
-      }));
-    }
-
-    // Priority B: If overall camps are present in summaryData
-    if (summaryData?.camps && summaryData.camps.length > 0) {
-      return summaryData.camps.map((c) => ({
-        campName: resolveDisplayName(c.campName),
-        salesCount: c.salesCount || 0,
-        revenue: c.revenue || 0,
-      }));
-    }
-
-    // Priority C: Camps master list
-    if (campsList && campsList.length > 0) {
-      return campsList.map((camp: any) => ({
-        campName: camp.name || "Camp",
-        salesCount: 0,
-        revenue: 0,
-      }));
-    }
-
-    return [];
+    return Array.from(campMap.values()).sort((a, b) => b.revenue - a.revenue);
   }, [summaryData, userType, allowedCamps, campsList, companyId, companyName]);
+
 
   // Ensure carousel index stays within bounds if items count decreases
   useEffect(() => {
@@ -2335,25 +2427,17 @@ export default function SalesReportDashboard() {
           <div className="flex items-center gap-2.5">
             <img src="/linkfi-logo.png" alt="LinkFi" className="h-9 w-auto object-contain" />
             <span className="font-extrabold text-[#1e3c72] text-xl tracking-wider hidden sm:inline">LinkFi</span>
-            <span className="text-[10px] font-bold uppercase tracking-wider bg-[#3958b2]/10 text-[#3958b2] px-2 py-0.5 rounded border border-[#3958b2]/20">
-              Sales Portal
-            </span>
           </div>
 
-          {/* Role and Company Status Pill */}
-          {userType === "report_user" ? (
+          {/* Role and Company Status Pill — only shown for report_user accounts */}
+          {userType === "report_user" && (
             <div className="hidden md:flex items-center gap-2 bg-indigo-50 border border-indigo-200 text-indigo-800 text-xs px-3 py-1 rounded-full font-bold">
               <span>🏢 {companyName || `Company #${companyId}`}</span>
               <span className="text-indigo-400">•</span>
               <span className="text-indigo-600">{allowedCamps.length} Allowed Camps</span>
             </div>
-          ) : (
-            <div className="hidden md:flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs px-3 py-1 rounded-full font-bold">
-              <span>🛡️ Super Administrator</span>
-              <span className="text-emerald-400">•</span>
-              <span className="text-emerald-600">Full Access (All Camps)</span>
-            </div>
           )}
+
         </div>
         
         {/* User profile details in top right */}
@@ -2645,29 +2729,47 @@ export default function SalesReportDashboard() {
         
         {/* Title bar of the section */}
         <div className="flex justify-between items-center mb-6">
-          <h3 className="text-xl font-bold text-[#1f2d3d] tracking-wide uppercase font-sans">
-            {activeTab === "dashboard" && "Dashboard"}
-            {activeTab === "voucher-sales" && "Voucher Sales"}
-            {activeTab === "monthly-sales" && "Monthly Voucher Sales"}
-            {activeTab === "sales-chart" && "Camps - Monthly Voucher Sales"}
-            {activeTab === "voucher-validity" && "Voucher Data [ Validity ]"}
-            {activeTab === "voucher-hotspot" && "Voucher Data [ Hotspot ]"}
-            {activeTab === "payment-camp" && "Payment Camp Report"}
-            {activeTab === "payment-user" && "Payment User Report"}
-            {activeTab === "user-sale" && "Users Sale Report"}
-            {activeTab === "companies" && "Companies Master"}
-            {activeTab === "camps" && "Camps Master"}
-            {activeTab === "validity-profiles" && "Validity Profiles Master"}
-            {activeTab === "camp-validity-pricing" && "Camp Profiles Master"}
-            {activeTab === "notifications" && "Notifications Master"}
-            {activeTab === "payments-list" && "Payments Log"}
-            {activeTab === "collected-payments" && "Collected Payments"}
-            {activeTab === "expenses-list" && "Expenses Log"}
-            {activeTab === "expenses-new" && "New Expense"}
-            {activeTab === "expenses-common-new" && "New Common Expense"}
-            {activeTab === "agents" && "Agent Performance Leaderboard"}
-            {activeTab === "pricing" && "Pricing Settings"}
-          </h3>
+          <div className="flex items-center gap-3">
+            <h3 className="text-xl font-bold text-[#1f2d3d] tracking-wide uppercase font-sans">
+              {activeTab === "dashboard" && "Dashboard"}
+              {activeTab === "voucher-sales" && "Voucher Sales"}
+              {activeTab === "monthly-sales" && "Monthly Voucher Sales"}
+              {activeTab === "sales-chart" && "Camps - Monthly Voucher Sales"}
+              {activeTab === "voucher-validity" && "Voucher Data [ Validity ]"}
+              {activeTab === "voucher-hotspot" && "Voucher Data [ Hotspot ]"}
+              {activeTab === "payment-camp" && "Payment Camp Report"}
+              {activeTab === "payment-user" && "Payment User Report"}
+              {activeTab === "user-sale" && "Users Sale Report"}
+              {activeTab === "companies" && "Companies Master"}
+              {activeTab === "camps" && "Camps Master"}
+              {activeTab === "validity-profiles" && "Validity Profiles Master"}
+              {activeTab === "camp-validity-pricing" && "Camp Profiles Master"}
+              {activeTab === "notifications" && "Notifications Master"}
+              {activeTab === "payments-list" && "Payments Log"}
+              {activeTab === "collected-payments" && "Collected Payments"}
+              {activeTab === "expenses-list" && "Expenses Log"}
+              {activeTab === "expenses-new" && "New Expense"}
+              {activeTab === "expenses-common-new" && "New Common Expense"}
+              {activeTab === "agents" && "Agent Performance Leaderboard"}
+              {activeTab === "pricing" && "Pricing Settings"}
+            </h3>
+            {activeTab === "dashboard" && (
+              <button
+                type="button"
+                onClick={() => {
+                  fetchSummary();
+                  fetchMonthlyCampAnalysis();
+                  fetchCamps();
+                }}
+                disabled={loadingSummary || loadingMonthlyCampAnalysis}
+                className="flex items-center gap-1.5 text-xs font-bold bg-white hover:bg-slate-50 border border-slate-200 text-[#3958b2] hover:text-blue-700 px-3 py-1.5 rounded-lg shadow-xs transition-all cursor-pointer active:scale-95 disabled:opacity-50"
+                title="Refresh all dashboard statistics"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${(loadingSummary || loadingMonthlyCampAnalysis) ? "animate-spin" : ""}`} />
+                <span>Refresh</span>
+              </button>
+            )}
+          </div>
           <div className="text-xs sm:text-sm text-slate-600 font-medium">
             Last Login: <span className="text-[#3958b2] font-bold">{lastLoginTime || "August 09, 2026 11:47 am"}</span>
           </div>
@@ -2984,7 +3086,7 @@ export default function SalesReportDashboard() {
                 Monthly Voucher Sales
               </h2>
               <div className="text-xs text-slate-500 font-medium">
-                Last Login: <span className="font-bold text-[#0073b7]">September 06, 2026 10:51 pm</span>
+                Last Login: <span className="font-bold text-[#0073b7]">{lastLoginTime || "August 09, 2026 11:47 am"}</span>
               </div>
             </div>
 
@@ -3025,7 +3127,7 @@ export default function SalesReportDashboard() {
                   <div>
                     <button 
                       type="submit" 
-                      className="bg-[#0073b7] hover:bg-[#006097] text-white font-bold px-6 py-2 rounded-lg flex items-center gap-1.5 transition-all shadow-sm text-sm"
+                      className="bg-[#0073b7] hover:bg-[#006097] text-white font-bold px-6 py-2 rounded-lg flex items-center gap-1.5 transition-all shadow-sm text-sm cursor-pointer"
                     >
                       <Search className="h-4 w-4" />
                       Search
@@ -3037,10 +3139,10 @@ export default function SalesReportDashboard() {
                 <div className="flex items-center gap-3">
                   <div className="bg-[#0073b7] text-white px-5 py-2 rounded-lg text-sm font-bold shadow-sm flex items-center gap-2">
                     <Calendar className="h-4 w-4" />
-                    <span>Total : {monthlyAggregatedTotals.count}</span>
+                    <span>Total : {formatCount(monthlyAggregatedTotals.count)}</span>
                   </div>
                   <div className="bg-[#0073b7] text-white px-5 py-2 rounded-lg text-sm font-bold shadow-sm">
-                    <span>Amount : {monthlyAggregatedTotals.revenue}</span>
+                    <span>Amount : AED {monthlyAggregatedTotals.revenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
                 </div>
 
@@ -3121,7 +3223,7 @@ export default function SalesReportDashboard() {
                 Camps - Monthly Voucher Sales
               </h2>
               <div className="text-xs text-slate-500 font-medium">
-                Last Login: <span className="font-bold text-[#0073b7]">September 06, 2026 10:51 pm</span>
+                Last Login: <span className="font-bold text-[#0073b7]">{lastLoginTime || "August 09, 2026 11:47 am"}</span>
               </div>
             </div>
 
@@ -4090,14 +4192,15 @@ export default function SalesReportDashboard() {
                   <Coins className="h-28 w-28 text-white" />
                 </div>
                 
-                {/* Header with Assigned Scope */}
-                <div className="text-xs uppercase font-bold tracking-widest opacity-85 mb-2 flex justify-between items-center z-10">
+                  <div className="text-xs uppercase font-bold tracking-widest opacity-85 mb-2 flex justify-between items-center z-10">
                   <div className="flex items-center gap-1.5">
                     <DollarSign className="h-4 w-4" />
                     <span>Outstanding Balance</span>
                   </div>
                   <span className="bg-white/20 text-white text-[10px] font-black px-2 py-0.5 rounded-full">
-                    {userType === "report_user" ? `${allowedCamps.length} Allowed Camps` : "All Camps"}
+                    {userType === "report_user" 
+                      ? `${allowedCamps.length} Camp${allowedCamps.length !== 1 ? "s" : ""}`
+                      : `${campsList.length > 0 ? campsList.length : "All"} Camps`}
                   </span>
                 </div>
                 
@@ -4147,9 +4250,9 @@ export default function SalesReportDashboard() {
                     <span>Today's Sale</span>
                   </div>
                   <span className="bg-white/20 text-white text-[10px] font-black px-2 py-0.5 rounded-full">
-                    {summaryData?.comparison.today.camps && summaryData.comparison.today.camps.length > 0 
-                      ? `${summaryData.comparison.today.camps.length} Camps Active Today`
-                      : "0 Camps Active Today"}
+                    {campCarouselItems.filter(c => c.salesCount > 0).length > 0
+                      ? `${campCarouselItems.filter(c => c.salesCount > 0).length} Camp${campCarouselItems.filter(c => c.salesCount > 0).length !== 1 ? "s" : ""} Active`
+                      : "No Camps Active Today"}
                   </span>
                 </div>
 
@@ -4173,18 +4276,18 @@ export default function SalesReportDashboard() {
                   </div>
                 </div>
 
-                {/* Today's active camps breakdown list with count */}
+                {/* Today's active camps breakdown — uses resolved display names from campCarouselItems */}
                 <div className="pt-2 border-t border-white/20 text-[10px] font-bold z-10">
-                  {summaryData?.comparison.today.camps && summaryData.comparison.today.camps.length > 0 ? (
+                  {campCarouselItems.some(c => c.salesCount > 0) ? (
                     <div className="flex flex-wrap items-center gap-1.5 max-h-[38px] overflow-y-auto pr-1">
-                      {summaryData.comparison.today.camps.map((c) => (
+                      {campCarouselItems.filter(c => c.salesCount > 0).map((c) => (
                         <span 
                           key={c.campName} 
                           className="bg-black/20 hover:bg-black/30 backdrop-blur-sm px-2 py-0.5 rounded text-[9px] font-bold flex items-center gap-1 transition-all"
-                          title={`${c.campName}: ${formatCount(c.count)} vouchers sold (AED ${c.revenue})`}
+                          title={`${c.campName}: ${formatCount(c.salesCount)} vouchers sold (AED ${c.revenue.toLocaleString()})`}
                         >
                           <span className="truncate max-w-[90px]">{c.campName}:</span>
-                          <span className="bg-white/30 text-white font-black px-1 rounded text-[8px]">{formatCount(c.count)}</span>
+                          <span className="bg-white/30 text-white font-black px-1 rounded text-[8px]">{formatCount(c.salesCount)}</span>
                         </span>
                       ))}
                     </div>
@@ -4197,7 +4300,7 @@ export default function SalesReportDashboard() {
                 </div>
               </div>
 
-              {/* Card 3: Expense (Placeholder until expense logic is implemented) */}
+              {/* Card 3: Expense - Real data from expenses table */}
               <div className="md:col-span-4 bg-gradient-to-br from-[#ffbc36] to-[#ff6228] text-white rounded-xl p-5 shadow-md relative overflow-hidden group min-h-[140px] flex flex-col justify-between">
                 <div className="absolute -right-3 -bottom-5 opacity-10 group-hover:scale-110 transition-transform duration-300 pointer-events-none">
                   <DollarSign className="h-28 w-28 text-white" />
@@ -4209,7 +4312,7 @@ export default function SalesReportDashboard() {
                     <span>Expense</span>
                   </div>
                   <span className="bg-white/20 text-white text-[10px] font-black px-2 py-0.5 rounded-full">
-                    Overview
+                    {(summaryData?.expenses?.thisMonth ?? 0) > 0 ? "Active" : "Overview"}
                   </span>
                 </div>
 
@@ -4219,7 +4322,7 @@ export default function SalesReportDashboard() {
                     <div className="flex items-baseline gap-1">
                       <span className="text-xs font-bold opacity-80">AED</span>
                       <span className="text-xl sm:text-2xl font-black tracking-tight leading-none">
-                        0.00
+                        {(summaryData?.expenses?.today ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     </div>
                   </div>
@@ -4229,15 +4332,19 @@ export default function SalesReportDashboard() {
                     <div className="flex items-baseline gap-1">
                       <span className="text-xs font-bold opacity-80">AED</span>
                       <span className="text-xl sm:text-2xl font-black tracking-tight leading-none">
-                        0.00
+                        {(summaryData?.expenses?.thisMonth ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     </div>
                   </div>
                 </div>
 
                 <div className="pt-2 border-t border-white/20 flex items-center justify-between text-[10px] font-bold z-10">
-                  <span className="text-white/90">No expense records</span>
-                  <span className="opacity-80">Last Update: Today's Sync</span>
+                  <span className="text-white/90">
+                    {(summaryData?.expenses?.thisMonth ?? 0) > 0
+                      ? `AED ${(summaryData?.expenses?.thisMonth ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })} spent this month`
+                      : "No expense records this month"}
+                  </span>
+                  <span className="opacity-80">Dubai UTC+4</span>
                 </div>
               </div>
 
@@ -4246,13 +4353,13 @@ export default function SalesReportDashboard() {
             {/* Middle Row Section: Agent Analysis (Left) & Slideshow stats (Right) */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mt-2">
               
-              {/* Left Panel: Company - Monthly Sales Analysis (5 cols) */}
+              {/* Left Panel: Camp - Monthly Sales Analysis (5 cols) */}
               <div className="lg:col-span-5 bg-white border border-[#cfdbe6] rounded-xl p-5 shadow-sm flex flex-col justify-between">
                 <div className="flex justify-between items-center pb-3 mb-3 border-b border-slate-100 gap-2">
                   <div className="flex items-center gap-2">
                     <Building2 className="h-4.5 w-4.5 text-[#3958b2]" />
                     <h4 className="text-xs sm:text-sm font-black text-slate-700 uppercase tracking-wider">
-                      Company - Monthly Sales Analysis
+                      Camp - Monthly Sales Analysis
                     </h4>
                   </div>
                   
@@ -4260,91 +4367,130 @@ export default function SalesReportDashboard() {
                   <div className="relative">
                     <input 
                       type="month" 
-                      value={dashboardAnalysisMonth || `${startDate.substring(0, 7)}`}
+                      value={dashboardAnalysisMonth}
                       onChange={(e) => {
                         const val = e.target.value;
                         setDashboardAnalysisMonth(val);
-                        if (val) {
-                          const [year, month] = val.split("-");
-                          const firstDay = `${year}-${month}-01`;
-                          const lastDay = new Date(Number(year), Number(month), 0).getDate();
-                          const lastDayStr = `${year}-${month}-${String(lastDay).padStart(2, "0")}`;
-                          setStartDate(firstDay);
-                          setEndDate(lastDayStr);
-                        }
+                        fetchMonthlyCampAnalysis(val);
                       }}
                       className="bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 font-bold text-[11px] px-2 py-1 rounded-md outline-none cursor-pointer transition-all shadow-xs"
                     />
                   </div>
                 </div>
 
+                {/* Previous month label */}
+                {monthlyCampAnalysis?.previousMonthKey && (
+                  <div className="text-[9px] font-semibold text-slate-400 uppercase tracking-widest mb-1">
+                    Prev month: {(() => {
+                      const [py, pm] = monthlyCampAnalysis.previousMonthKey.split("-");
+                      return new Date(Number(py), Number(pm) - 1, 1).toLocaleString("default", { month: "short", year: "numeric" });
+                    })()}
+                  </div>
+                )}
+
                 {/* Table Header */}
                 <div className="grid grid-cols-12 text-[10px] font-black text-slate-400 uppercase tracking-widest pb-2 border-b border-slate-100 items-center">
                   <div className="col-span-4 flex items-center gap-1">
-                    <span>Company</span>
+                    <span>Camp</span>
                   </div>
-                  <div className="col-span-2 text-right">Prev Count</div>
-                  <div className="col-span-2 text-right">Sales Count</div>
-                  <div className="col-span-3 text-right">Sale Amount</div>
-                  <div className="col-span-1 text-center" title="Statistics">Stats</div>
+                  <div className="col-span-2 text-right">Prev</div>
+                  <div className="col-span-2 text-right">This Month</div>
+                  <div className="col-span-3 text-right">Amount</div>
+                  <div className="col-span-1 text-center" title="Statistics">📊</div>
                 </div>
 
                 {/* Table Records Body */}
                 <div className="flex-1 divide-y divide-slate-100 max-h-[220px] overflow-y-auto pr-1">
-                  {loadingSummary ? (
+                  {loadingMonthlyCampAnalysis ? (
                     <div className="py-10 text-center">
                       <RefreshCw className="h-5 w-5 animate-spin text-slate-400 mx-auto" />
                     </div>
-                  ) : summaryData?.companies && summaryData.companies.length > 0 ? (
-                    summaryData.companies.map((comp) => (
+                  ) : monthlyCampAnalysis && monthlyCampAnalysis.currentMonth.length > 0 ? (() => {
+                    // Build a lookup map for previous month by campName
+                    const prevMap = new Map<string, { salesCount: number; revenue: number }>();
+                    for (const p of monthlyCampAnalysis.previousMonth) {
+                      prevMap.set(p.campName?.toLowerCase?.() ?? "", p);
+                    }
+
+                    return monthlyCampAnalysis.currentMonth.map((camp) => {
+                      const prevEntry = prevMap.get(camp.campName?.toLowerCase?.() ?? "");
+                      const hasPrev = !!prevEntry && (prevEntry.salesCount > 0 || prevEntry.revenue > 0);
+
+                      return (
+                        <div 
+                          key={camp.campName} 
+                          onClick={() => setActiveTab("voucher-sales")}
+                          className="grid grid-cols-12 items-center py-2.5 hover:bg-slate-50 rounded-lg px-1 transition-all cursor-pointer text-xs"
+                        >
+                          {/* Camp Name */}
+                          <div className="col-span-4 font-bold text-slate-700 flex items-center gap-1.5 truncate">
+                            <span className="w-2.5 h-2.5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center font-bold text-[8px] shrink-0">
+                              C
+                            </span>
+                            <span className="truncate" title={camp.campName}>{camp.campName}</span>
+                          </div>
+                          
+                          {/* Previous Month Count */}
+                          <div className="col-span-2 text-right font-semibold text-[11px]">
+                            {hasPrev ? (
+                              <span className="text-slate-400">{formatCount(prevEntry!.salesCount)}</span>
+                            ) : (
+                              <span className="text-slate-300 italic text-[9px]">N/A</span>
+                            )}
+                          </div>
+                          
+                          {/* Current Month Sales Count */}
+                          <div className="col-span-2 text-right font-extrabold text-slate-700 text-[11px] flex items-center justify-end gap-0.5">
+                            <span>{formatCount(camp.salesCount)}</span>
+                            {hasPrev && (
+                              <span className={`text-[8px] ml-0.5 ${camp.salesCount > prevEntry!.salesCount ? "text-emerald-500" : camp.salesCount < prevEntry!.salesCount ? "text-red-400" : "text-slate-300"}`}>
+                                {camp.salesCount > prevEntry!.salesCount ? "▲" : camp.salesCount < prevEntry!.salesCount ? "▼" : "–"}
+                              </span>
+                            )}
+                          </div>
+                          
+                          {/* Sale Amount */}
+                          <div className="col-span-3 text-right font-black text-[#3958b2] text-[11px] truncate">
+                            AED {camp.revenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                          
+                          {/* Stats Button */}
+                          <div className="col-span-1 flex justify-center items-center">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveTab("sales-chart");
+                              }}
+                              className="p-1 text-slate-400 hover:text-[#3958b2] hover:bg-[#3958b2]/10 rounded transition-all"
+                              title="View Sales Statistics"
+                            >
+                              <BarChart3 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    });
+                  })() : monthlyCampAnalysis && monthlyCampAnalysis.currentMonth.length === 0 && monthlyCampAnalysis.previousMonth.length > 0 ? (
+                    // Has no current month but has previous month data — show prev month camps with N/A current
+                    monthlyCampAnalysis.previousMonth.map((camp) => (
                       <div 
-                        key={comp.companyName} 
-                        onClick={() => {
-                          setActiveTab("voucher-sales");
-                        }}
-                        className="grid grid-cols-12 items-center py-2.5 hover:bg-slate-50 rounded-lg px-1 transition-all cursor-pointer text-xs"
+                        key={camp.campName} 
+                        className="grid grid-cols-12 items-center py-2.5 text-xs px-1"
                       >
-                        <div className="col-span-4 font-bold text-slate-700 flex items-center gap-1.5 truncate">
-                          <span className="w-2.5 h-2.5 rounded-full bg-[#3958b2]/20 text-[#3958b2] flex items-center justify-center font-bold text-[8px] shrink-0">
-                            C
-                          </span>
-                          <span className="truncate" title={comp.companyName}>{comp.companyName}</span>
+                        <div className="col-span-4 font-bold text-slate-500 flex items-center gap-1.5 truncate">
+                          <span className="w-2.5 h-2.5 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center font-bold text-[8px] shrink-0">C</span>
+                          <span className="truncate" title={camp.campName}>{camp.campName}</span>
                         </div>
-                        
-                        {/* Previous Count */}
-                        <div className="col-span-2 text-right font-semibold text-slate-400 text-[11px]">
-                          {formatCount(Math.round(comp.salesCount * 0.9 * 10) / 10)}
-                        </div>
-                        
-                        {/* Sales Count */}
-                        <div className="col-span-2 text-right font-extrabold text-slate-700 text-[11px]">
-                          {formatCount(comp.salesCount)}
-                        </div>
-                        
-                        {/* Sale Amount */}
-                        <div className="col-span-3 text-right font-black text-[#3958b2] text-[11px] truncate">
-                          AED {comp.revenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </div>
-                        
-                        {/* Static Icon to show later statistics of sales */}
-                        <div className="col-span-1 flex justify-center items-center">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setActiveTab("sales-chart");
-                            }}
-                            className="p-1 text-slate-400 hover:text-[#3958b2] hover:bg-[#3958b2]/10 rounded transition-all"
-                            title="View Sales Statistics"
-                          >
-                            <BarChart3 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
+                        <div className="col-span-2 text-right font-semibold text-slate-400 text-[11px]">{formatCount(camp.salesCount)}</div>
+                        <div className="col-span-2 text-right font-extrabold text-slate-300 text-[11px] italic text-[9px]">N/A</div>
+                        <div className="col-span-3 text-right font-black text-slate-300 text-[11px]">—</div>
+                        <div className="col-span-1" />
                       </div>
                     ))
                   ) : (
                     <div className="py-10 text-center text-slate-400 text-xs italic">
-                      No company records to display for this month.
+                      No camp sales recorded for this month.
                     </div>
                   )}
                 </div>
@@ -4460,19 +4606,29 @@ export default function SalesReportDashboard() {
                     <div>
                       <span className="text-[10px] opacity-75 font-semibold uppercase block">Amount</span>
                       <span className="text-xl font-black">
-                        AED {Number(summaryData?.comparison?.thisMonth?.revenue ?? summaryData?.summary?.totalRevenue ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        AED {Number(summaryData?.comparison?.thisMonth?.revenue ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     </div>
                     <div>
                       <span className="text-[10px] opacity-75 font-semibold uppercase block">Count</span>
                       <span className="text-base font-bold">
-                        {formatCount(summaryData?.comparison?.thisMonth?.sales ?? summaryData?.summary?.totalSales ?? 0)} vouchers
+                        {formatCount(summaryData?.comparison?.thisMonth?.sales ?? 0)} vouchers
                       </span>
                     </div>
                   </div>
 
-                  <div className="text-[9px] font-bold opacity-80">
-                    Last Update: This Month Sync
+                  <div className="text-[9px] font-bold opacity-80 flex justify-between items-center">
+                    <span>
+                      {(() => {
+                        const now = new Date();
+                        return now.toLocaleString("default", { month: "long", year: "numeric" });
+                      })()}
+                    </span>
+                    {(summaryData?.comparison?.yesterday?.sales ?? 0) > 0 && (
+                      <span className="bg-white/20 px-1.5 py-0.5 rounded">
+                        Yesterday: {formatCount(summaryData?.comparison?.yesterday?.sales)}
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -4488,21 +4644,31 @@ export default function SalesReportDashboard() {
                       <span>Last Month Sale</span>
                     </div>
                     <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full font-bold">
-                      Previous Month
+                      {(() => {
+                        const now = new Date();
+                        const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+                        return prev.toLocaleString("default", { month: "long", year: "numeric" });
+                      })()}
                     </span>
                   </div>
 
-                  <div className="py-2.5 flex-1 flex flex-col justify-center gap-1.5 z-10">
+                  <div className="py-2.5 flex-1 grid grid-cols-2 gap-3 items-center z-10">
                     <div>
-                      <span className="text-[10px] opacity-75 font-semibold uppercase block">Sale Amount</span>
-                      <span className="text-2xl font-black tracking-tight">
+                      <span className="text-[9px] opacity-75 font-semibold uppercase block">Sale Amount</span>
+                      <span className="text-xl sm:text-2xl font-black tracking-tight">
                         AED {Number(summaryData?.lastMonth?.sales?.revenue || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] opacity-75 font-semibold uppercase block">Sale Count</span>
-                      <span className="text-base font-bold">
+                      <span className="text-[10px] font-bold block opacity-90 mt-0.5">
                         {formatCount(summaryData?.lastMonth?.sales?.count || 0)} vouchers
+                      </span>
+                    </div>
+                    <div className="border-l border-white/25 pl-3">
+                      <span className="text-[9px] opacity-75 font-semibold uppercase block">Collections</span>
+                      <span className="text-xl sm:text-2xl font-black tracking-tight">
+                        AED {Number(summaryData?.lastMonth?.collection?.revenue || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                      <span className="text-[10px] font-bold block opacity-90 mt-0.5">
+                        {summaryData?.lastMonth?.collection?.count || 0} collected
                       </span>
                     </div>
                   </div>

@@ -113,6 +113,21 @@ export async function initializeDB() {
   try { await db.execute("ALTER TABLE notifications ADD COLUMN expires_at TEXT;"); } catch {}
   try { await db.execute("ALTER TABLE notifications ADD COLUMN is_read INTEGER DEFAULT 0;"); } catch {}
 
+  // Create report_users table if not exists (shared with microtik main portal)
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS report_users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT NOT NULL UNIQUE,
+      password TEXT NOT NULL,
+      display_name TEXT,
+      company_id INTEGER REFERENCES companies(id),
+      allowed_camp_ids TEXT,
+      status INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+  try { await db.execute("ALTER TABLE report_users ADD COLUMN status INTEGER DEFAULT 1;"); } catch {}
+
   // Create payments table
   await db.execute(`
     CREATE TABLE IF NOT EXISTS payments (

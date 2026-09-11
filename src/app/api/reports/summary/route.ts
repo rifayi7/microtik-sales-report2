@@ -120,13 +120,13 @@ export async function GET(request: Request) {
     // 6. Get Sales Performance by Company
     const companySql = `
       SELECT 
-        COALESCE(NULLIF(c.company_name, ''), NULLIF(comp.name, ''), 'Default Company') as companyName, 
+        COALESCE(NULLIF(comp.name, ''), NULLIF(c.company_name, ''), 'Unknown') as companyName, 
         SUM(${unitCountExpr}) as salesCount, 
         SUM(${priceExpr}) as revenue 
       FROM vouchers v
       LEFT JOIN routers r ON (CAST(r.id AS TEXT) = CAST(v.router_id AS TEXT) OR r.sessionName = v.router_id)
       LEFT JOIN camps c ON (v.router_id = c.name OR CAST(v.router_id AS TEXT) = CAST(c.id AS TEXT) OR v.router_id = c.hotspot_name OR r.camp = c.name)
-      LEFT JOIN companies comp ON (c.company_name = comp.name)
+      LEFT JOIN companies comp ON (comp.id = r.company_id OR comp.id = c.company_id OR LOWER(comp.name) = LOWER(c.company_name))
       LEFT JOIN camp_validity_pricing cvp ON (cvp.router_id = v.router_id AND cvp.validity = v.validity_days)
       LEFT JOIN validity_profiles vp ON (vp.name = v.validity_days || '-Days' OR vp.name = v.validity_days || '-D' OR CAST(vp.name AS INTEGER) = v.validity_days)
       ${whereClause}
@@ -177,10 +177,7 @@ export async function GET(request: Request) {
     let finalTodayCamps: { campName: string; count: number; revenue: number }[] = [];
 
     if (!isZeroAccess) {
-      const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
-      const yesterdayDate = new Date(Date.now() - 86400000);
-      const yesterday = yesterdayDate.toISOString().split("T")[0];
-
+      // Dubai Business Day is UTC+4
       const todayStatsSql = `
         SELECT 
           SUM(${unitCountExpr}) as count, 
@@ -188,14 +185,27 @@ export async function GET(request: Request) {
         FROM vouchers v
         LEFT JOIN camp_validity_pricing cvp ON (cvp.router_id = v.router_id AND cvp.validity = v.validity_days)
         LEFT JOIN validity_profiles vp ON (vp.name = v.validity_days || '-Days' OR vp.name = v.validity_days || '-D' OR CAST(vp.name AS INTEGER) = v.validity_days)
-        WHERE v.status = 'redeemed' AND v.used_at >= ? AND v.used_at <= ? ${campScopeSql}
+        WHERE v.status = 'redeemed' 
+          AND date(v.used_at, '+4 hours') = date('now', '+4 hours')
+          ${campScopeSql}
       `;
-      const todayStats = (await db.execute({ sql: todayStatsSql, args: [`${today} 00:00:00`, `${today} 23:59:59`, ...campScopeArgs] })).rows[0] as unknown as {
+      const todayStats = (await db.execute({ sql: todayStatsSql, args: [...campScopeArgs] })).rows[0] as unknown as {
         count: number | null;
         revenue: number | null;
       };
 
-      const yesterdayStats = (await db.execute({ sql: todayStatsSql, args: [`${yesterday} 00:00:00`, `${yesterday} 23:59:59`, ...campScopeArgs] })).rows[0] as unknown as {
+      const yesterdayStatsSql = `
+        SELECT 
+          SUM(${unitCountExpr}) as count, 
+          SUM(${priceExpr}) as revenue
+        FROM vouchers v
+        LEFT JOIN camp_validity_pricing cvp ON (cvp.router_id = v.router_id AND cvp.validity = v.validity_days)
+        LEFT JOIN validity_profiles vp ON (vp.name = v.validity_days || '-Days' OR vp.name = v.validity_days || '-D' OR CAST(vp.name AS INTEGER) = v.validity_days)
+        WHERE v.status = 'redeemed' 
+          AND date(v.used_at, '+4 hours') = date('now', '+4 hours', '-1 day')
+          ${campScopeSql}
+      `;
+      const yesterdayStats = (await db.execute({ sql: yesterdayStatsSql, args: [...campScopeArgs] })).rows[0] as unknown as {
         count: number | null;
         revenue: number | null;
       };
@@ -205,15 +215,7 @@ export async function GET(request: Request) {
       yesterdaySales = Number(yesterdayStats?.count || 0);
       yesterdayRevenue = Number(yesterdayStats?.revenue || 0);
 
-      // Real Dynamic This Month Sales Calculation
-      const now = new Date();
-      const thisMonthYear = now.getFullYear();
-      const thisMonthNum = String(now.getMonth() + 1).padStart(2, "0");
-      const thisMonthYearMonth = `${thisMonthYear}-${thisMonthNum}`;
-      const thisMonthStart = `${thisMonthYearMonth}-01 00:00:00`;
-      const lastDayOfCurrentMonth = new Date(thisMonthYear, now.getMonth() + 1, 0).getDate();
-      const thisMonthEnd = `${thisMonthYearMonth}-${String(lastDayOfCurrentMonth).padStart(2, "0")} 23:59:59`;
-
+      // Real Dynamic This Month Sales Calculation (Dubai UTC+4 month)
       const thisMonthSalesSql = `
         SELECT 
           SUM(${unitCountExpr}) as count, 
@@ -221,9 +223,11 @@ export async function GET(request: Request) {
         FROM vouchers v
         LEFT JOIN camp_validity_pricing cvp ON (cvp.router_id = v.router_id AND cvp.validity = v.validity_days)
         LEFT JOIN validity_profiles vp ON (vp.name = v.validity_days || '-Days' OR vp.name = v.validity_days || '-D' OR CAST(vp.name AS INTEGER) = v.validity_days)
-        WHERE v.status = 'redeemed' AND v.used_at >= ? AND v.used_at <= ? ${campScopeSql}
+        WHERE v.status = 'redeemed' 
+          AND strftime('%Y-%m', v.used_at, '+4 hours') = strftime('%Y-%m', 'now', '+4 hours')
+          ${campScopeSql}
       `;
-      const thisMonthSalesRow = (await db.execute({ sql: thisMonthSalesSql, args: [thisMonthStart, thisMonthEnd, ...campScopeArgs] })).rows[0] as unknown as {
+      const thisMonthSalesRow = (await db.execute({ sql: thisMonthSalesSql, args: [...campScopeArgs] })).rows[0] as unknown as {
         count: number | null;
         revenue: number | null;
       };
@@ -231,15 +235,7 @@ export async function GET(request: Request) {
       thisMonthSalesCount = Number(thisMonthSalesRow?.count || 0);
       thisMonthSalesRevenue = Number(thisMonthSalesRow?.revenue || 0);
 
-      // Real Dynamic Last Month Sales and Collections Calculation
-      const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      const lastMonthYear = lastMonthDate.getFullYear();
-      const lastMonthNum = String(lastMonthDate.getMonth() + 1).padStart(2, "0");
-      const lastMonthYearMonth = `${lastMonthYear}-${lastMonthNum}`;
-      const lastMonthStart = `${lastMonthYearMonth}-01 00:00:00`;
-      const lastDayOfPrevMonth = new Date(lastMonthYear, lastMonthDate.getMonth() + 1, 0).getDate();
-      const lastMonthEnd = `${lastMonthYearMonth}-${String(lastDayOfPrevMonth).padStart(2, "0")} 23:59:59`;
-
+      // Real Dynamic Last Month Sales and Collections Calculation (Dubai UTC+4 previous month)
       const lastMonthSalesSql = `
         SELECT 
           SUM(${unitCountExpr}) as count, 
@@ -247,9 +243,11 @@ export async function GET(request: Request) {
         FROM vouchers v
         LEFT JOIN camp_validity_pricing cvp ON (cvp.router_id = v.router_id AND cvp.validity = v.validity_days)
         LEFT JOIN validity_profiles vp ON (vp.name = v.validity_days || '-Days' OR vp.name = v.validity_days || '-D' OR CAST(vp.name AS INTEGER) = v.validity_days)
-        WHERE v.status = 'redeemed' AND v.used_at >= ? AND v.used_at <= ? ${campScopeSql}
+        WHERE v.status = 'redeemed' 
+          AND strftime('%Y-%m', v.used_at, '+4 hours') = strftime('%Y-%m', 'now', '+4 hours', 'start of month', '-1 month')
+          ${campScopeSql}
       `;
-      const lastMonthSalesRow = (await db.execute({ sql: lastMonthSalesSql, args: [lastMonthStart, lastMonthEnd, ...campScopeArgs] })).rows[0] as unknown as {
+      const lastMonthSalesRow = (await db.execute({ sql: lastMonthSalesSql, args: [...campScopeArgs] })).rows[0] as unknown as {
         count: number | null;
         revenue: number | null;
       };
@@ -261,6 +259,13 @@ export async function GET(request: Request) {
         paymentCampScopeSql = ` AND camp_name IN (${placeholders})`;
         paymentCampScopeArgs.push(...effectiveAllowedCamps);
       }
+
+      const now = new Date();
+      const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const lastMonthYear = lastMonthDate.getFullYear();
+      const lastMonthNum = String(lastMonthDate.getMonth() + 1).padStart(2, "0");
+      const lastMonthYearMonth = `${lastMonthYear}-${lastMonthNum}`;
+      const lastDayOfPrevMonth = new Date(lastMonthYear, lastMonthDate.getMonth() + 1, 0).getDate();
 
       const lastMonthCollectionSql = `
         SELECT COUNT(*) as count, SUM(COALESCE(amount, 0)) as revenue
@@ -280,7 +285,7 @@ export async function GET(request: Request) {
       lastMonthCollectionCount = Number(lastMonthCollectionRow?.count || 0);
       lastMonthCollectionRevenue = Number(lastMonthCollectionRow?.revenue || 0);
 
-      // Today sales breakdown per camp
+      // Today sales breakdown per camp (Dubai UTC+4 today)
       const todayCampSql = `
         SELECT 
           COALESCE(NULLIF(r.camp, ''), NULLIF(r.sessionName, ''), NULLIF(c.name, ''), NULLIF(v.router_id, ''), 'Camp') as campName, 
@@ -291,11 +296,13 @@ export async function GET(request: Request) {
         LEFT JOIN camps c ON (v.router_id = c.name OR CAST(v.router_id AS TEXT) = CAST(c.id AS TEXT) OR v.router_id = c.hotspot_name)
         LEFT JOIN camp_validity_pricing cvp ON (cvp.router_id = v.router_id AND cvp.validity = v.validity_days)
         LEFT JOIN validity_profiles vp ON (vp.name = v.validity_days || '-Days' OR vp.name = v.validity_days || '-D' OR CAST(vp.name AS INTEGER) = v.validity_days)
-        WHERE v.status = 'redeemed' AND v.used_at >= ? AND v.used_at <= ? ${campScopeSql}
+        WHERE v.status = 'redeemed' 
+          AND date(v.used_at, '+4 hours') = date('now', '+4 hours')
+          ${campScopeSql}
         GROUP BY campName
         ORDER BY revenue DESC
       `;
-      const todayCampsRows = (await db.execute({ sql: todayCampSql, args: [`${today} 00:00:00`, `${today} 23:59:59`, ...campScopeArgs] })).rows as unknown as {
+      const todayCampsRows = (await db.execute({ sql: todayCampSql, args: [...campScopeArgs] })).rows as unknown as {
         campName: string;
         count: number;
         revenue: number;
@@ -322,6 +329,42 @@ export async function GET(request: Request) {
     } else {
       totalSales = 0;
       totalRevenue = 0;
+    }
+
+    // Expense summaries — scoped by company if restricted user
+    let todayExpense = 0;
+    let thisMonthExpense = 0;
+    let lastMonthExpense = 0;
+    try {
+      const now = new Date();
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
+      const thisMonthStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
+      const prevMonthDate = new Date(now.getFullYear(), now.getMonth()-1, 1);
+      const prevMonthStr = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth()+1).padStart(2,"0")}`;
+
+      // Build expense company filter if restricted
+      let expCompanyCondition = "";
+      const expCompanyArgs: any[] = [];
+      if (isReportUserRestricted && effectiveAllowedCamps.length > 0) {
+        // Get distinct company names for allowed camps
+        const campCompanyPlaceholders = effectiveAllowedCamps.map(() => "?").join(",");
+        expCompanyCondition = ` AND (company_name IN (
+          SELECT DISTINCT company_name FROM camps WHERE (name IN (${campCompanyPlaceholders}) OR hotspot_name IN (${campCompanyPlaceholders})) AND company_name IS NOT NULL
+          UNION SELECT DISTINCT comp.name FROM routers r JOIN companies comp ON r.company_id = comp.id WHERE (r.camp IN (${campCompanyPlaceholders}) OR r.sessionName IN (${campCompanyPlaceholders})) AND comp.name IS NOT NULL
+        ) OR company_name IS NULL)`;
+        expCompanyArgs.push(...effectiveAllowedCamps, ...effectiveAllowedCamps, ...effectiveAllowedCamps, ...effectiveAllowedCamps);
+      }
+
+      const [todayExpRow, thisMonthExpRow, lastMonthExpRow] = await Promise.all([
+        db.execute({ sql: `SELECT COALESCE(SUM(amount),0) as total FROM expenses WHERE expense_date = ?${expCompanyCondition}`, args: [todayStr, ...expCompanyArgs] }),
+        db.execute({ sql: `SELECT COALESCE(SUM(amount),0) as total FROM expenses WHERE strftime('%Y-%m', expense_date) = ?${expCompanyCondition}`, args: [thisMonthStr, ...expCompanyArgs] }),
+        db.execute({ sql: `SELECT COALESCE(SUM(amount),0) as total FROM expenses WHERE strftime('%Y-%m', expense_date) = ?${expCompanyCondition}`, args: [prevMonthStr, ...expCompanyArgs] }),
+      ]);
+      todayExpense = Number((todayExpRow.rows[0] as any)?.total || 0);
+      thisMonthExpense = Number((thisMonthExpRow.rows[0] as any)?.total || 0);
+      lastMonthExpense = Number((lastMonthExpRow.rows[0] as any)?.total || 0);
+    } catch (e) {
+      console.warn("Expense summary failed:", e);
     }
 
     return NextResponse.json({
@@ -351,7 +394,14 @@ export async function GET(request: Request) {
         collection: {
           count: lastMonthCollectionCount || 0,
           revenue: lastMonthCollectionRevenue || 0,
-        }
+        },
+        expense: {
+          amount: lastMonthExpense || 0,
+        },
+      },
+      expenses: {
+        today: todayExpense || 0,
+        thisMonth: thisMonthExpense || 0,
       },
       agents: finalAgents,
       camps: finalCamps,
@@ -360,8 +410,12 @@ export async function GET(request: Request) {
       trends: finalTrends,
     });
   } catch (error) {
+    const msg = error instanceof Error ? error.message : "Failed to load summary stats";
+    if (msg.includes("ACCOUNT_PAUSED") || msg.includes("COMPANY_SUSPENDED")) {
+      return NextResponse.json({ error: msg, isPaused: true }, { status: 403 });
+    }
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to load summary stats" },
+      { error: msg },
       { status: 500 }
     );
   }

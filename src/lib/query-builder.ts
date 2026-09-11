@@ -106,13 +106,31 @@ export async function buildWhereClauseAsync(
     try {
       // 1. Check report_users table
       const repRes = await db.execute({
-        sql: "SELECT allowed_camp_ids, company_id FROM report_users WHERE LOWER(username) = LOWER(?) LIMIT 1",
+        sql: `
+          SELECT ru.allowed_camp_ids, ru.company_id, ru.status,
+                 COALESCE(c.status, 1) as company_status, c.suspended_reason
+          FROM report_users ru
+          LEFT JOIN companies c ON ru.company_id = c.id
+          WHERE LOWER(ru.username) = LOWER(?)
+          LIMIT 1
+        `,
         args: [rawUsername.trim()],
       });
 
       if (repRes.rows.length > 0) {
         isReportUserRestricted = true;
         const rRow = repRes.rows[0];
+
+        // PAUSE ENFORCEMENT: If report user account is paused, immediately block request
+        if (Number(rRow.status ?? 1) === 0) {
+          throw new Error("ACCOUNT_PAUSED: Your account has been paused by the administrator.");
+        }
+
+        // Dues enforcement: If company is suspended
+        if (rRow.company_status !== undefined && Number(rRow.company_status) === 0) {
+          throw new Error("COMPANY_SUSPENDED: " + (rRow.suspended_reason ? String(rRow.suspended_reason) : "Account suspended due to company dues."));
+        }
+
         effectiveCompanyId = rRow.company_id ? Number(rRow.company_id) : null;
         if (rRow.allowed_camp_ids) {
           try {
@@ -144,19 +162,25 @@ export async function buildWhereClauseAsync(
         }
       }
     } catch (err) {
+      if (err instanceof Error && (err.message.includes("ACCOUNT_PAUSED") || err.message.includes("COMPANY_SUSPENDED"))) {
+        throw err;
+      }
       console.warn("Error fetching authoritative permissions from DB:", err);
     }
   }
 
-  if (
-    !isReportUserRestricted &&
-    (rawUserType === "report_user" || rawUserType === "salesperson" || (userPayload && userPayload.role !== "superadmin"))
-  ) {
-    isReportUserRestricted = true;
+  const isSuperAdmin = rawUserType === "superadmin" || userPayload?.role === "superadmin" || userPayload?.userType === "superadmin";
+
+  if (!isSuperAdmin) {
+    if (rawUserType === "report_user" || rawUserType === "salesperson" || (userPayload && userPayload.role !== "superadmin")) {
+      isReportUserRestricted = true;
+    }
+  } else {
+    isReportUserRestricted = false;
   }
 
   // Fallback to token allowedCamps if DB lookup had no rows
-  if (effectiveAllowedCamps.length === 0 && userPayload?.allowedCamps && userPayload.allowedCamps.length > 0) {
+  if (isReportUserRestricted && effectiveAllowedCamps.length === 0 && userPayload?.allowedCamps && userPayload.allowedCamps.length > 0) {
     effectiveAllowedCamps = userPayload.allowedCamps;
   }
 

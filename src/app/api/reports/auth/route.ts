@@ -13,6 +13,26 @@ export async function POST(request: Request) {
       const cleanUsername = String(username || "").trim();
       const cleanPassword = String(password || "").trim();
 
+      if (!cleanUsername || !cleanPassword) {
+        return NextResponse.json({ error: "Username and password are required" }, { status: 400 });
+      }
+
+      // CRITICAL PAUSE CHECK: If user is paused in report_users, deny immediately
+      try {
+        const checkReportPaused = await db.execute({
+          sql: "SELECT status FROM report_users WHERE LOWER(username) = LOWER(?) LIMIT 1",
+          args: [cleanUsername],
+        });
+        if (checkReportPaused.rows.length > 0 && Number(checkReportPaused.rows[0].status ?? 1) === 0) {
+          return NextResponse.json({
+            error: "Your account is paused by the administrator. Access is disabled until resumed.",
+            isPaused: true,
+          }, { status: 403 });
+        }
+      } catch (e) {
+        console.warn("Notice checking paused report_users:", e);
+      }
+
       // 1. Check super_admins table
       try {
         const superRes = await db.execute({
@@ -150,8 +170,8 @@ export async function POST(request: Request) {
       try {
         const repRes = await db.execute({
           sql: `
-            SELECT ru.id, ru.username, ru.password, ru.display_name, ru.company_id, ru.company_name, 
-                   ru.allowed_camp_ids, ru.allowed_router_ids, ru.status,
+            SELECT ru.id, ru.username, ru.password, ru.display_name, ru.company_id,
+                   ru.allowed_camp_ids, ru.status,
                    c.name as resolved_company_name,
                    COALESCE(c.status, 1) as company_status,
                    c.suspended_reason
@@ -165,19 +185,24 @@ export async function POST(request: Request) {
 
         if (repRes.rows.length > 0) {
           const row = repRes.rows[0];
-          const storedPassword = String(row.password || "");
-          const isPasswordValid = verifyPassword(cleanPassword, storedPassword);
-          if (!isPasswordValid) {
-            return NextResponse.json({ error: "Invalid username or password" }, { status: 400 });
-          }
 
+          // IMMEDIATE PAUSE CHECK: Block login immediately if account is paused
           if (Number(row.status ?? 1) === 0) {
-            return NextResponse.json({ error: "Your account is disabled. Please contact administrator." }, { status: 403 });
+            return NextResponse.json({
+              error: "Your account is paused by the administrator. Access is disabled until resumed.",
+              isPaused: true,
+            }, { status: 403 });
           }
 
           if (row.company_status !== undefined && Number(row.company_status) === 0) {
             const reason = row.suspended_reason ? String(row.suspended_reason) : "Account suspended due to company dues.";
             return NextResponse.json({ error: reason, isSuspended: true }, { status: 403 });
+          }
+
+          const storedPassword = String(row.password || "");
+          const isPasswordValid = verifyPassword(cleanPassword, storedPassword);
+          if (!isPasswordValid) {
+            return NextResponse.json({ error: "Invalid username or password" }, { status: 400 });
           }
 
           if (needsRehash(storedPassword)) {
@@ -207,7 +232,7 @@ export async function POST(request: Request) {
             displayName: String(row.display_name || row.username),
             userType: "report_user" as const,
             companyId: row.company_id ? Number(row.company_id) : null,
-            companyName: String(row.resolved_company_name || row.company_name || ""),
+            companyName: String(row.resolved_company_name || ""),
             allowedCamps,
           };
 
@@ -234,6 +259,17 @@ export async function POST(request: Request) {
 
       // 4. Check sales_persons table
       try {
+        // Enforce pause: if user also exists as a report_user and is paused, never allow login
+        const checkReportPaused = await db.execute({
+          sql: "SELECT status FROM report_users WHERE LOWER(username) = LOWER(?) LIMIT 1",
+          args: [cleanUsername],
+        });
+        if (checkReportPaused.rows.length > 0 && Number(checkReportPaused.rows[0].status ?? 1) === 0) {
+          return NextResponse.json({
+            error: "Your account is paused by the administrator. Access is disabled until resumed.",
+            isPaused: true,
+          }, { status: 403 });
+        }
         const spRes = await db.execute({
           sql: `
             SELECT sp.id, sp.username, sp.password, sp.display_name, sp.company_id, sp.allowed_camps,
@@ -320,6 +356,24 @@ export async function POST(request: Request) {
       const cleanUsername = String(username || "").trim();
       if (!cleanUsername) return NextResponse.json({ valid: false, error: "No user provided" }, { status: 400 });
 
+      // CRITICAL PAUSE CHECK: If user is paused in report_users, invalidate session immediately
+      try {
+        const checkReportPaused = await db.execute({
+          sql: "SELECT status FROM report_users WHERE LOWER(username) = LOWER(?) LIMIT 1",
+          args: [cleanUsername],
+        });
+        if (checkReportPaused.rows.length > 0 && Number(checkReportPaused.rows[0].status ?? 1) === 0) {
+          return NextResponse.json({
+            valid: false,
+            error: "Your account has been paused by the administrator. Access is disabled until resumed.",
+            isPaused: true,
+            isDeleted: true,
+          }, { status: 403 });
+        }
+      } catch (e) {
+        console.warn("Notice checking paused report_users in check-session:", e);
+      }
+
       // 1. Check company_admins
       try {
         const adminRes = await db.execute({
@@ -361,7 +415,12 @@ export async function POST(request: Request) {
         if (repRes.rows.length > 0) {
           const row = repRes.rows[0];
           if (Number(row.status ?? 1) === 0) {
-            return NextResponse.json({ valid: false, error: "Your account has been disabled. Logging out...", isDeleted: true }, { status: 403 });
+            return NextResponse.json({
+              valid: false,
+              error: "Your account has been paused by the administrator. You have been logged out.",
+              isPaused: true,
+              isDeleted: true,
+            }, { status: 403 });
           }
           if (row.company_status !== undefined && Number(row.company_status) === 0) {
             const reason = row.suspended_reason ? String(row.suspended_reason) : "Account suspended due to company dues.";
@@ -375,6 +434,19 @@ export async function POST(request: Request) {
 
       // 3. Check sales_persons
       try {
+        const checkReportPaused = await db.execute({
+          sql: "SELECT status FROM report_users WHERE LOWER(username) = LOWER(?) LIMIT 1",
+          args: [cleanUsername],
+        });
+        if (checkReportPaused.rows.length > 0 && Number(checkReportPaused.rows[0].status ?? 1) === 0) {
+          return NextResponse.json({
+            valid: false,
+            error: "Your account has been paused by the administrator. You have been logged out.",
+            isPaused: true,
+            isDeleted: true,
+          }, { status: 403 });
+        }
+
         const spRes = await db.execute({
           sql: `
             SELECT sp.id, c.status as company_status, c.suspended_reason

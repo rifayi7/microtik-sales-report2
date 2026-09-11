@@ -20,7 +20,7 @@ export async function GET(request: Request) {
   try {
     const db = await getDB();
     const url = new URL(request.url);
-    const { whereClause, params } = await buildWhereClauseAsync(url.searchParams, request);
+    const { whereClause, params, effectiveAllowedCamps, isReportUserRestricted } = await buildWhereClauseAsync(url.searchParams, request);
 
     // Get pagination parameters
     const limit = url.searchParams.get("limit") ? Number(url.searchParams.get("limit")) : 50;
@@ -45,13 +45,14 @@ export async function GET(request: Request) {
         v.used_at as timestamp, 
         COALESCE(NULLIF(sp.display_name, ''), NULLIF(sp.username, ''), NULLIF(v.sold_by, '')) as seller, 
         v.router_id as routerId,
-        COALESCE(v.price_charged, 0) as price,
+        COALESCE(v.price_charged, cvp.price, CASE WHEN v.validity_days = 30 THEN 32 ELSE 16 END) as price,
         COALESCE(NULLIF(r.camp, ''), NULLIF(r.sessionName, ''), NULLIF(c.name, ''), NULLIF(v.router_id, '')) as campName,
         COALESCE(NULLIF(r.hotspotName, ''), NULLIF(c.hotspot_name, ''), NULLIF(r.camp, ''), NULLIF(c.name, ''), NULLIF(v.router_id, '')) as hotspotName
       FROM vouchers v
       LEFT JOIN routers r ON (CAST(r.id AS TEXT) = CAST(v.router_id AS TEXT) OR r.sessionName = v.router_id)
       LEFT JOIN camps c ON (v.router_id = c.name OR CAST(v.router_id AS TEXT) = CAST(c.id AS TEXT) OR v.router_id = c.hotspot_name OR r.camp = c.name)
       LEFT JOIN sales_persons sp ON (v.sales_person_id = sp.id OR v.sold_by = sp.username OR v.sold_by = sp.display_name)
+      LEFT JOIN camp_validity_pricing cvp ON (cvp.router_id = v.router_id AND cvp.validity = v.validity_days)
       ${whereClause}
       ORDER BY v.used_at DESC
       LIMIT ? OFFSET ?
@@ -123,15 +124,36 @@ export async function GET(request: Request) {
     const plans = plansRows.map(row => row.days);
 
     // 8. Get distinct camps dynamically from camps and routers tables
-    const campsSql = `
-      SELECT DISTINCT name FROM (
-        SELECT name FROM camps WHERE name IS NOT NULL AND name != ''
-        UNION
-        SELECT camp as name FROM routers WHERE camp IS NOT NULL AND camp != ''
-      ) ORDER BY name ASC
-    `;
-    const campsRows = (await db.execute({ sql: campsSql, args: [] })).rows as unknown as { name: string }[];
-    const camps = campsRows.map(row => row.name);
+    let camps: string[] = [];
+    if (isReportUserRestricted) {
+      if (effectiveAllowedCamps.length > 0) {
+        const placeholders = effectiveAllowedCamps.map(() => "?").join(",");
+        const campsSql = `
+          SELECT DISTINCT name FROM (
+            SELECT name FROM camps WHERE (name IN (${placeholders}) OR hotspot_name IN (${placeholders}) OR CAST(id AS TEXT) IN (${placeholders}))
+            UNION
+            SELECT camp as name FROM routers WHERE (camp IN (${placeholders}) OR sessionName IN (${placeholders}) OR CAST(id AS TEXT) IN (${placeholders}))
+          ) WHERE name IS NOT NULL AND name != '' ORDER BY name ASC
+        `;
+        const campsRows = (await db.execute({ 
+          sql: campsSql, 
+          args: [...effectiveAllowedCamps, ...effectiveAllowedCamps, ...effectiveAllowedCamps, ...effectiveAllowedCamps, ...effectiveAllowedCamps, ...effectiveAllowedCamps] 
+        })).rows as unknown as { name: string }[];
+        camps = campsRows.map(row => row.name);
+      } else {
+        camps = [];
+      }
+    } else {
+      const campsSql = `
+        SELECT DISTINCT name FROM (
+          SELECT name FROM camps WHERE name IS NOT NULL AND name != ''
+          UNION
+          SELECT camp as name FROM routers WHERE camp IS NOT NULL AND camp != ''
+        ) ORDER BY name ASC
+      `;
+      const campsRows = (await db.execute({ sql: campsSql, args: [] })).rows as unknown as { name: string }[];
+      camps = campsRows.map(row => row.name);
+    }
 
     // 9. Get distinct companies dynamically from companies and camps tables
     const companiesSql = `
@@ -164,8 +186,12 @@ export async function GET(request: Request) {
       }
     });
   } catch (error) {
+    const msg = error instanceof Error ? error.message : "Failed to load sales log";
+    if (msg.includes("ACCOUNT_PAUSED") || msg.includes("COMPANY_SUSPENDED")) {
+      return NextResponse.json({ error: msg, isPaused: true }, { status: 403 });
+    }
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to load sales log" },
+      { error: msg },
       { status: 500 }
     );
   }
