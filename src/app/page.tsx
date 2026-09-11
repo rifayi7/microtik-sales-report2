@@ -318,6 +318,7 @@ export default function SalesReportDashboard() {
   const [editPriceMap, setEditPriceMap] = useState<Record<number, string>>({});
 
   // Auth & Profile states
+  const [isAuthChecking, setIsAuthChecking] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loggedInUser, setLoggedInUser] = useState("");
   const [userDisplayName, setUserDisplayName] = useState("");
@@ -369,7 +370,17 @@ export default function SalesReportDashboard() {
       if (savedSession) {
         const parsed = JSON.parse(savedSession);
         if (parsed?.username) {
-          // Verify live session immediately against database
+          // Immediately set logged-in state so there is NO momentary login page flash on reload
+          setIsLoggedIn(true);
+          setLoggedInUser(parsed.username);
+          setUserDisplayName(parsed.displayName || parsed.username);
+          setUserType(parsed.userType || "superadmin");
+          setCompanyId(parsed.companyId ?? null);
+          setCompanyName(parsed.companyName || "");
+          setAllowedCamps(Array.isArray(parsed.allowedCamps) ? parsed.allowedCamps : []);
+          setIsAuthChecking(false);
+
+          // Verify live session immediately against database in the background
           fetch("/api/reports/auth", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -379,32 +390,30 @@ export default function SalesReportDashboard() {
             .then((data) => {
               if (data && data.valid) {
                 setIsLoggedIn(true);
-                setLoggedInUser(parsed.username);
-                setUserDisplayName(parsed.displayName || parsed.username);
-                setUserType(parsed.userType || "superadmin");
-                setCompanyId(parsed.companyId ?? null);
-                setCompanyName(parsed.companyName || "");
-                setAllowedCamps(Array.isArray(parsed.allowedCamps) ? parsed.allowedCamps : []);
+                if (data.allowedCamps) {
+                  setAllowedCamps(Array.isArray(data.allowedCamps) ? data.allowedCamps : []);
+                }
               } else {
                 alert(data?.error || "Your account has been deactivated or company suspended.");
                 setIsLoggedIn(false);
-                try { localStorage.removeItem("linkfi_sales_user_session"); } catch {}
+                try { 
+                  localStorage.removeItem("linkfi_sales_user_session"); 
+                  localStorage.removeItem("linkfi_sales_auth_token");
+                } catch {}
               }
             })
             .catch(() => {
-              // Network fallback
-              setIsLoggedIn(true);
-              setLoggedInUser(parsed.username);
-              setUserDisplayName(parsed.displayName || parsed.username);
-              setUserType(parsed.userType || "superadmin");
-              setCompanyId(parsed.companyId ?? null);
-              setCompanyName(parsed.companyName || "");
-              setAllowedCamps(Array.isArray(parsed.allowedCamps) ? parsed.allowedCamps : []);
+              // Network fallback: retain local session
             });
+        } else {
+          setIsAuthChecking(false);
         }
+      } else {
+        setIsAuthChecking(false);
       }
     } catch (e) {
       console.warn("Session restore error:", e);
+      setIsAuthChecking(false);
     }
 
     // Dynamically load camps, companies, and sales persons on initial mount
@@ -578,9 +587,11 @@ export default function SalesReportDashboard() {
 
   const handleLogout = () => {
     setIsLoggedIn(false);
+    setIsAuthChecking(false);
     setIsProfileDropdownOpen(false);
     try {
       localStorage.removeItem("linkfi_sales_user_session");
+      localStorage.removeItem("linkfi_sales_auth_token");
     } catch (e) {
       console.warn("Storage remove error:", e);
     }
@@ -2210,6 +2221,23 @@ export default function SalesReportDashboard() {
     e.stopPropagation();
     setActiveDropdown((prev) => (prev === type ? null : type));
   };
+
+  if (isAuthChecking) {
+    return (
+      <div className="min-h-screen bg-[#d5e5f4] flex flex-col items-center justify-center font-sans p-6">
+        <div className="flex flex-col items-center gap-4 animate-pulse">
+          <div className="flex items-center gap-2 justify-center">
+            <img src="/linkfi-logo.png" alt="LinkFi" className="h-12 w-auto object-contain" />
+            <span className="font-extrabold text-[#1e3c72] text-3xl tracking-wider">LinkFi</span>
+          </div>
+          <div className="flex items-center gap-2 text-slate-500 font-semibold text-xs mt-1">
+            <RefreshCw className="h-3.5 w-3.5 animate-spin text-[#3958b2]" />
+            <span>Loading workspace...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!isLoggedIn) {
     return (
