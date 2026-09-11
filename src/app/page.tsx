@@ -547,15 +547,19 @@ export default function SalesReportDashboard() {
         setCompanyName(data.companyName || "");
         setAllowedCamps(Array.isArray(data.allowedCamps) ? data.allowedCamps : []);
 
-        // Save to localStorage
+        // Save to localStorage with token and username
         try {
+          if (data.token) {
+            localStorage.setItem("linkfi_sales_auth_token", data.token);
+          }
           localStorage.setItem("linkfi_sales_user_session", JSON.stringify({
             username: data.username,
             displayName: data.displayName || data.username,
             userType: data.userType || "superadmin",
             companyId: data.companyId ?? null,
             companyName: data.companyName || "",
-            allowedCamps: Array.isArray(data.allowedCamps) ? data.allowedCamps : []
+            allowedCamps: Array.isArray(data.allowedCamps) ? data.allowedCamps : [],
+            token: data.token || null
           }));
         } catch (e) {
           console.warn("Storage save error:", e);
@@ -620,11 +624,17 @@ export default function SalesReportDashboard() {
       if (selectedRouter) params.append("router", selectedRouter);
       if (searchQuery) params.append("search", searchQuery);
       if (userType) params.append("userType", userType);
+      if (loggedInUser) params.append("username", loggedInUser);
       if (userType === "report_user") {
         params.append("allowedCamps", JSON.stringify(allowedCamps));
       }
 
-      const res = await fetch(`/api/reports/summary?${params.toString()}`);
+      const authToken = typeof window !== "undefined" ? localStorage.getItem("linkfi_sales_auth_token") : null;
+      const res = await fetch(`/api/reports/summary?${params.toString()}`, {
+        headers: {
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
+        }
+      });
       const data = await res.json();
       if (data.success) {
         setSummaryData(data);
@@ -677,11 +687,17 @@ export default function SalesReportDashboard() {
       if (selectedSoldType && selectedSoldType !== "all") params.append("soldType", selectedSoldType);
       if (searchQuery) params.append("search", searchQuery);
       if (userType) params.append("userType", userType);
+      if (loggedInUser) params.append("username", loggedInUser);
       if (userType === "report_user") {
         params.append("allowedCamps", JSON.stringify(allowedCamps));
       }
 
-      const res = await fetch(`/api/reports/sales?${params.toString()}`);
+      const authToken = typeof window !== "undefined" ? localStorage.getItem("linkfi_sales_auth_token") : null;
+      const res = await fetch(`/api/reports/sales?${params.toString()}`, {
+        headers: {
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
+        }
+      });
       const data = await res.json();
       if (data.success) {
         setSalesData(data);
