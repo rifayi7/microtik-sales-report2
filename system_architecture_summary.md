@@ -112,7 +112,20 @@ All tenant entities in the LinkFi ecosystem are bound together strictly using **
 
 ---
 
-## ?? End-to-End API Security & Parameter Tamper-Proofing
+## 🛡️ Super Administrator Dynamic Management & Bootstrap Architecture
+
+1. **Dedicated Database Storage**:
+   - Stored dynamically in the `super_admins` table (`id`, `username`, `display_name`, `password`, `created_at`).
+   - Managed strictly via the server-side CLI tool `npm run bootstrap:superadmin` (`scripts/bootstrap-superadmin.mjs`) on Turso Cloud with password confirmation and mandatory inputs.
+2. **Zero Hardcoded Credentials**:
+   - All hardcoded fallback credentials (`admin` / `admin123`) and legacy default seeds have been completely removed.
+   - Authentication is strictly verified against dynamic database records using salted `scrypt` hashing.
+3. **Cross-Table Conflict Prevention**:
+   - Super Admin usernames and Company Admin usernames are cross-checked across both tables with a privacy-preserving neutral error message (`"This username is already taken. Please choose another one."`).
+
+---
+
+## 🔒 End-to-End API Security & Parameter Tamper-Proofing
 
 1. **Strict Server-Side Authorization (`requireAuth` & `buildWhereClauseAsync`)**:
    - Every protected API route validates JWT bearer tokens, signature integrity, and active tenant status.
@@ -121,5 +134,19 @@ All tenant entities in the LinkFi ecosystem are bound together strictly using **
    - Attack vector mitigated: Malicious clients attempting to append or modify query parameters (e.g. `allowedCamps`, `companyId`, `userType`, `routerId`) cannot escalate permissions or view other companies'/camps' sales logs, summaries, or payments.
    - Any query specifying unauthorized camp or router identifiers is filtered out or rejected with HTTP 403 `Access Denied`.
 3. **Password Security Standard**:
-   - Uses Node.js native `scrypt` hashing with unique per-password cryptographic salts across all ecosystem tables (`sales_persons`, `report_users`, `company_admins`).
-   - Backward-compatible auto-upgrade smoothly migrates legacy credentials upon successful login.
+   - Uses Node.js native `scrypt` hashing with unique per-password cryptographic salts across all ecosystem tables (`super_admins`, `company_admins`, `sales_persons`, `report_users`).
+   - Backward-compatible auto-upgrade smoothly migrates legacy credentials upon successful login (`needsRehash` transparently upgrades DB record to `scrypt`).
+4. **Single Active Device Concurrency Control (Kick Out Previous Device)**:
+   - Enforced on all salesperson logins via a dynamic `active_session_token` recorded in the `sales_persons` table and embedded into the JWT token payload.
+   - When a salesperson logs into a new device (Phone B), a fresh session UUID is generated in the database.
+   - Any ongoing API calls, profile polling, or voucher recharges from the previous device (Phone A) are immediately rejected with HTTP 401 (`errorCode: "SESSION_EXPIRED_OTHER_DEVICE"`), automatically logging out the previous phone and alerting the operator.
+5. **Default-Deny Camp Permissions (0-Access When Empty/Null)**:
+   - For both `sales_persons` and `report_users`, if `allowed_camps` or `allowed_camp_ids` is `null`, empty string `""`, or an empty JSON array `[]`, the system strictly interprets this as **0 Access (NO camps permitted)** — **NEVER** "All Camps".
+   - **Sales Operation POS**:
+     - `GET /api/mikrotik/routers`: Returns `[]` (0 routers available).
+     - `POST /api/mikrotik/vouchers/plans`: Denies access with HTTP 403 (`"Access Denied: No camps assigned to your account"`).
+     - `POST /api/mikrotik/vouchers/redeem`: Blocks sales with HTTP 403 (`"Access Denied: No camps assigned to your account"`).
+     - `POST /api/mikrotik/vouchers/list`: Denies voucher listing with HTTP 403.
+   - **Sales & Accounting Portal**:
+     - Summary metrics, comparison cards, and voucher sales lists evaluate to `1 = 0`, returning `0 sales`, `0 revenue`, and `[]` empty camp lists.
+
