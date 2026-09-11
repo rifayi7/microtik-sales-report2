@@ -1978,6 +1978,38 @@ export default function SalesReportDashboard() {
 
   // Camp sales data for Dashboard Today's Camps Sales Carousel
   const campCarouselItems = useMemo(() => {
+    // If user is a restricted report_user
+    if (userType === "report_user") {
+      if (!allowedCamps || allowedCamps.length === 0) {
+        return [];
+      }
+
+      // Map each allowed camp to its today's sales if present, or 0
+      const todayCampSalesMap = new Map<string, { count: number; revenue: number }>();
+      if (summaryData?.comparison?.today?.camps) {
+        for (const c of summaryData.comparison.today.camps) {
+          todayCampSalesMap.set(c.campName, { count: c.count || 0, revenue: c.revenue || 0 });
+        }
+      }
+
+      return allowedCamps.map((campName) => {
+        let displayName = campName;
+        if (campName.startsWith("router-") && campsList.length > 0) {
+          const match = campsList.find(
+            (camp) => camp.name === campName || camp.hotspot_name === campName || String(camp.id) === campName
+          );
+          if (match) displayName = match.name;
+        }
+        const sales = todayCampSalesMap.get(campName) || { count: 0, revenue: 0 };
+        return {
+          campName: displayName,
+          salesCount: sales.count,
+          revenue: sales.revenue,
+        };
+      });
+    }
+
+    // For unrestricted/admin users:
     // 1. If today's camp sales are present in summaryData comparison
     if (summaryData?.comparison?.today?.camps && summaryData.comparison.today.camps.length > 0) {
       return summaryData.comparison.today.camps.map((c) => {
@@ -1996,16 +2028,7 @@ export default function SalesReportDashboard() {
       });
     }
 
-    // 2. If user is report_user and has allowed camps, list them with today's count (0 if no sales yet)
-    if (userType === "report_user" && allowedCamps && allowedCamps.length > 0) {
-      return allowedCamps.map((campName) => ({
-        campName,
-        salesCount: 0,
-        revenue: 0,
-      }));
-    }
-
-    // 3. Fallback to general camps list
+    // 2. Fallback to general camps list
     if (summaryData?.camps && summaryData.camps.length > 0) {
       return summaryData.camps.map((c) => {
         let displayName = c.campName;
@@ -2033,6 +2056,13 @@ export default function SalesReportDashboard() {
 
     return [];
   }, [summaryData, userType, allowedCamps, campsList]);
+
+  // Ensure carousel index stays within bounds if items count decreases
+  useEffect(() => {
+    if (campCarouselIndex >= campCarouselItems.length && campCarouselItems.length > 0) {
+      setCampCarouselIndex(0);
+    }
+  }, [campCarouselItems.length, campCarouselIndex]);
 
   // Auto-slide effect for Camps Carousel
   useEffect(() => {
@@ -4331,8 +4361,9 @@ export default function SalesReportDashboard() {
                       </div>
                     </div>
                   ) : (
-                    <div className="py-4 text-center text-xs opacity-75 italic flex-1 flex items-center justify-center z-10">
-                      No camp sales records found.
+                    <div className="py-4 text-center text-xs opacity-85 italic flex-1 flex flex-col items-center justify-center z-10 gap-1">
+                      <span>{userType === "report_user" && (!allowedCamps || allowedCamps.length === 0) ? "No camps assigned to your account" : "No camp sales recorded today"}</span>
+                      <span className="text-[10px] opacity-70 font-normal">0 vouchers sold</span>
                     </div>
                   )}
 

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDB } from "@/lib/db";
+import { buildWhereClauseAsync } from "@/lib/query-builder";
 
 export const runtime = "nodejs";
 
@@ -11,9 +12,21 @@ export async function GET(request: Request) {
     const company = url.searchParams.get("company");
     const sortBy = url.searchParams.get("sortBy");
 
+    const { effectiveAllowedCamps, isReportUserRestricted } = await buildWhereClauseAsync(url.searchParams, request);
+
+    if (isReportUserRestricted && effectiveAllowedCamps.length === 0) {
+      return NextResponse.json({ success: true, data: [] });
+    }
+
     let query = "SELECT * FROM camps";
     let conditions: string[] = [];
     let params: any[] = [];
+
+    if (isReportUserRestricted && effectiveAllowedCamps.length > 0) {
+      const placeholders = effectiveAllowedCamps.map(() => "?").join(",");
+      conditions.push(`(name IN (${placeholders}) OR hotspot_name IN (${placeholders}) OR CAST(id AS TEXT) IN (${placeholders}))`);
+      params.push(...effectiveAllowedCamps, ...effectiveAllowedCamps, ...effectiveAllowedCamps);
+    }
 
     if (search && search.trim() !== "") {
       conditions.push("(name LIKE ? OR hotspot_name LIKE ?)");
