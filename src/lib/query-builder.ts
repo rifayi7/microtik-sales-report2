@@ -99,59 +99,69 @@ export async function buildWhereClauseAsync(
   const rawUserType = searchParams.get("userType") || userPayload?.role || userPayload?.userType;
   const rawUsername = searchParams.get("username") || userPayload?.sub;
 
-  if (rawUserType === "report_user" || rawUserType === "salesperson" || (userPayload && userPayload.role !== "superadmin")) {
-    isReportUserRestricted = true;
-    const db = await getDB();
+  const db = await getDB();
 
-    // Query database for authoritative allowed_camps
-    if (rawUsername) {
-      try {
-        // 1. Try report_users table
-        const repRes = await db.execute({
-          sql: "SELECT allowed_camp_ids, company_id FROM report_users WHERE LOWER(username) = LOWER(?) LIMIT 1",
-          args: [rawUsername.trim()],
+  // Query database authoritatively for user identity and permissions
+  if (rawUsername) {
+    try {
+      // 1. Check report_users table
+      const repRes = await db.execute({
+        sql: "SELECT allowed_camp_ids, company_id FROM report_users WHERE LOWER(username) = LOWER(?) LIMIT 1",
+        args: [rawUsername.trim()],
+      });
+
+      if (repRes.rows.length > 0) {
+        isReportUserRestricted = true;
+        const rRow = repRes.rows[0];
+        effectiveCompanyId = rRow.company_id ? Number(rRow.company_id) : null;
+        if (rRow.allowed_camp_ids) {
+          try {
+            const parsed = JSON.parse(String(rRow.allowed_camp_ids));
+            if (Array.isArray(parsed)) effectiveAllowedCamps = parsed;
+          } catch {
+            effectiveAllowedCamps = [String(rRow.allowed_camp_ids)];
+          }
+        }
+      } else {
+        // 2. Check sales_persons table
+        const spRes = await db.execute({
+          sql: "SELECT allowed_camps, company_id FROM sales_persons WHERE LOWER(username) = LOWER(?) OR LOWER(display_name) = LOWER(?) LIMIT 1",
+          args: [rawUsername.trim(), rawUsername.trim()],
         });
 
-        if (repRes.rows.length > 0) {
-          const rRow = repRes.rows[0];
-          effectiveCompanyId = rRow.company_id ? Number(rRow.company_id) : null;
-          if (rRow.allowed_camp_ids) {
+        if (spRes.rows.length > 0) {
+          isReportUserRestricted = true;
+          const spRow = spRes.rows[0];
+          effectiveCompanyId = spRow.company_id ? Number(spRow.company_id) : null;
+          if (spRow.allowed_camps) {
             try {
-              effectiveAllowedCamps = JSON.parse(String(rRow.allowed_camp_ids));
+              const parsed = JSON.parse(String(spRow.allowed_camps));
+              if (Array.isArray(parsed)) effectiveAllowedCamps = parsed;
             } catch {
-              effectiveAllowedCamps = [String(rRow.allowed_camp_ids)];
-            }
-          }
-        } else {
-          // 2. Try sales_persons table
-          const spRes = await db.execute({
-            sql: "SELECT allowed_camps, company_id FROM sales_persons WHERE LOWER(username) = LOWER(?) OR LOWER(display_name) = LOWER(?) LIMIT 1",
-            args: [rawUsername.trim(), rawUsername.trim()],
-          });
-
-          if (spRes.rows.length > 0) {
-            const spRow = spRes.rows[0];
-            effectiveCompanyId = spRow.company_id ? Number(spRow.company_id) : null;
-            if (spRow.allowed_camps) {
-              try {
-                effectiveAllowedCamps = JSON.parse(String(spRow.allowed_camps));
-              } catch {
-                effectiveAllowedCamps = [String(spRow.allowed_camps)];
-              }
+              effectiveAllowedCamps = [String(spRow.allowed_camps)];
             }
           }
         }
-      } catch (err) {
-        console.warn("Error fetching authoritative permissions from DB:", err);
       }
+    } catch (err) {
+      console.warn("Error fetching authoritative permissions from DB:", err);
     }
+  }
 
-    // Fallback to token allowedCamps if DB lookup had no rows
-    if (effectiveAllowedCamps.length === 0 && userPayload?.allowedCamps && userPayload.allowedCamps.length > 0) {
-      effectiveAllowedCamps = userPayload.allowedCamps;
-    }
+  if (
+    !isReportUserRestricted &&
+    (rawUserType === "report_user" || rawUserType === "salesperson" || (userPayload && userPayload.role !== "superadmin"))
+  ) {
+    isReportUserRestricted = true;
+  }
 
-    // Enforce allowed camps filter
+  // Fallback to token allowedCamps if DB lookup had no rows
+  if (effectiveAllowedCamps.length === 0 && userPayload?.allowedCamps && userPayload.allowedCamps.length > 0) {
+    effectiveAllowedCamps = userPayload.allowedCamps;
+  }
+
+  // Enforce allowed camps filter for restricted users
+  if (isReportUserRestricted) {
     if (effectiveAllowedCamps.length === 0) {
       // User has 0 allowed camps -> Return NO records
       conditions.push("1 = 0");
