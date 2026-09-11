@@ -416,18 +416,21 @@ export default function SalesReportDashboard() {
       setIsAuthChecking(false);
     }
 
+    const savedToken = typeof window !== "undefined" ? localStorage.getItem("linkfi_sales_auth_token") : null;
+    const authHeaders: HeadersInit = savedToken ? { Authorization: `Bearer ${savedToken}` } : {};
+
     // Dynamically load camps, companies, and sales persons on initial mount
-    fetch("/api/reports/camps")
+    fetch("/api/reports/camps", { headers: authHeaders })
       .then(res => res.json())
       .then(d => { if (d.success && Array.isArray(d.data)) setCampsList(d.data); })
       .catch(console.error);
 
-    fetch("/api/reports/companies")
+    fetch("/api/reports/companies", { headers: authHeaders })
       .then(res => res.json())
       .then(d => { if (d.success && Array.isArray(d.data)) setCompaniesList(d.data); })
       .catch(console.error);
 
-    fetch("/api/reports/sales-persons")
+    fetch("/api/reports/sales-persons", { headers: authHeaders })
       .then(res => res.json())
       .then(d => { if (d.success && Array.isArray(d.data)) setSalesPersonsList(d.data); })
       .catch(console.error);
@@ -1989,7 +1992,7 @@ export default function SalesReportDashboard() {
 
   // Camp sales data for Dashboard Today's Camps Sales Carousel
   const campCarouselItems = useMemo(() => {
-    // If user is a restricted report_user
+    // 1. If user is a restricted report_user
     if (userType === "report_user") {
       if (!allowedCamps || allowedCamps.length === 0) {
         return [];
@@ -2020,53 +2023,89 @@ export default function SalesReportDashboard() {
       });
     }
 
-    // For unrestricted/admin users:
-    // 1. If today's camp sales are present in summaryData comparison
-    if (summaryData?.comparison?.today?.camps && summaryData.comparison.today.camps.length > 0) {
-      return summaryData.comparison.today.camps.map((c) => {
-        let displayName = c.campName;
-        if (c.campName.startsWith("router-") && campsList.length > 0) {
-          const match = campsList.find(
-            (camp) => camp.name === c.campName || camp.hotspot_name === c.campName || String(camp.id) === c.campName
-          );
-          if (match) displayName = match.name;
+    // 2. If user is a company_admin (scope strictly to their company camps)
+    if (userType === "company_admin") {
+      let filteredCompanyCamps: any[] = [];
+      if (campsList && campsList.length > 0) {
+        filteredCompanyCamps = campsList.filter((c: any) => {
+          const idMatch = companyId && (Number(c.company_id) === Number(companyId) || Number(c.resolved_company_id) === Number(companyId));
+          const nameMatch = companyName && c.company_name && c.company_name.toLowerCase() === companyName.toLowerCase();
+          return idMatch || nameMatch;
+        });
+      }
+
+      if (filteredCompanyCamps.length === 0) {
+        return [];
+      }
+
+      const todayCampSalesMap = new Map<string, { count: number; revenue: number }>();
+      if (summaryData?.comparison?.today?.camps) {
+        for (const c of summaryData.comparison.today.camps) {
+          todayCampSalesMap.set(c.campName, { count: c.count || 0, revenue: c.revenue || 0 });
         }
+      }
+
+      return filteredCompanyCamps.map((camp: any) => {
+        const campName = camp.name || "Camp";
+        const sales = todayCampSalesMap.get(campName) || 
+                      todayCampSalesMap.get(camp.hotspot_name) || 
+                      todayCampSalesMap.get(String(camp.id)) || 
+                      { count: 0, revenue: 0 };
         return {
-          campName: displayName,
-          salesCount: c.count || 0,
-          revenue: c.revenue || 0,
+          campName,
+          salesCount: sales.count,
+          revenue: sales.revenue,
         };
       });
     }
 
-    // 2. Fallback to general camps list
-    if (summaryData?.camps && summaryData.camps.length > 0) {
-      return summaryData.camps.map((c) => {
-        let displayName = c.campName;
-        if (c.campName.startsWith("router-") && campsList.length > 0) {
-          const match = campsList.find(
-            (camp) => camp.name === c.campName || camp.hotspot_name === c.campName || String(camp.id) === c.campName
-          );
-          if (match) displayName = match.name;
-        }
-        return {
-          campName: displayName,
-          salesCount: c.salesCount || 0,
-          revenue: c.revenue || 0,
-        };
-      });
-    }
+    // 3. For superadmin only:
+    if (userType === "superadmin") {
+      if (summaryData?.comparison?.today?.camps && summaryData.comparison.today.camps.length > 0) {
+        return summaryData.comparison.today.camps.map((c) => {
+          let displayName = c.campName;
+          if (c.campName.startsWith("router-") && campsList.length > 0) {
+            const match = campsList.find(
+              (camp) => camp.name === c.campName || camp.hotspot_name === c.campName || String(camp.id) === c.campName
+            );
+            if (match) displayName = match.name;
+          }
+          return {
+            campName: displayName,
+            salesCount: c.count || 0,
+            revenue: c.revenue || 0,
+          };
+        });
+      }
 
-    if (campsList && campsList.length > 0) {
-      return campsList.map((camp: any) => ({
-        campName: camp.name || "Camp",
-        salesCount: 0,
-        revenue: 0,
-      }));
+      if (summaryData?.camps && summaryData.camps.length > 0) {
+        return summaryData.camps.map((c) => {
+          let displayName = c.campName;
+          if (c.campName.startsWith("router-") && campsList.length > 0) {
+            const match = campsList.find(
+              (camp) => camp.name === c.campName || camp.hotspot_name === c.campName || String(camp.id) === c.campName
+            );
+            if (match) displayName = match.name;
+          }
+          return {
+            campName: displayName,
+            salesCount: c.salesCount || 0,
+            revenue: c.revenue || 0,
+          };
+        });
+      }
+
+      if (campsList && campsList.length > 0) {
+        return campsList.map((camp: any) => ({
+          campName: camp.name || "Camp",
+          salesCount: 0,
+          revenue: 0,
+        }));
+      }
     }
 
     return [];
-  }, [summaryData, userType, allowedCamps, campsList]);
+  }, [summaryData, userType, allowedCamps, campsList, companyId, companyName]);
 
   // Ensure carousel index stays within bounds if items count decreases
   useEffect(() => {
