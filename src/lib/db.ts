@@ -214,35 +214,6 @@ export async function initializeDB() {
     );
   `);
 
-  // Create users table for authentication
-  await db.execute(`
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      username TEXT NOT NULL UNIQUE,
-      password TEXT NOT NULL
-    );
-  `);
-
-  // Seed default expenses
-  const checkExpenses = await db.execute("SELECT COUNT(*) as count FROM expenses");
-  const expensesCount = Number(checkExpenses.rows[0]?.count ?? 0);
-  if (expensesCount === 0) {
-    await db.batch([
-      { sql: "INSERT OR IGNORE INTO expenses (company_name, common_category, expense_category, supplier_name, expense_date, expense_by, amount, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", args: ["Apricom DXB", null, "Office Rent", "Landlord Ltd", "2026-08-01", "Akif", 12000.00, "Rent for Aug 2026"] },
-      { sql: "INSERT OR IGNORE INTO expenses (company_name, common_category, expense_category, supplier_name, expense_date, expense_by, amount, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", args: [null, "Hardware Purchase", "Office Equipment", "Supplier XYZ", "2026-08-05", "Muzain", 1500.00, "Bought 10 routers"] },
-    ], "write");
-  }
-
-  // Seed default credentials
-  const checkUsers = await db.execute("SELECT COUNT(*) as count FROM users");
-  const usersCount = Number(checkUsers.rows[0]?.count ?? 0);
-  if (usersCount === 0) {
-    await db.execute({
-      sql: "INSERT OR IGNORE INTO users (username, password) VALUES (?, ?)",
-      args: ["iqbaal", "admin"],
-    });
-  }
-
   // Seed default pricing if none exists
   const checkPricing = await db.execute("SELECT COUNT(*) as count FROM sales_pricing");
   const countRow = Number(checkPricing.rows[0]?.count ?? 0);

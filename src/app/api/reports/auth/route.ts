@@ -71,37 +71,6 @@ export async function POST(request: Request) {
         console.warn("Notice checking super_admins:", e);
       }
 
-      // Emergency Super Admin Failsafe (only if table empty)
-      if (cleanUsername.toLowerCase() === "admin" && cleanPassword === "admin123") {
-        try {
-          const countRes = await db.execute("SELECT COUNT(*) as count FROM super_admins");
-          if (Number(countRes.rows[0]?.count ?? 0) === 0) {
-            const user = {
-              userType: "superadmin" as const,
-              username: "admin",
-              displayName: "Super Administrator",
-              companyId: null,
-              companyName: null,
-              allowedCamps: [] as string[],
-            };
-            const token = signJwt({
-              sub: user.username,
-              displayName: user.displayName,
-              role: "superadmin",
-              userType: "superadmin",
-              companyId: null,
-              companyName: null,
-              allowedCamps: [],
-            });
-            return NextResponse.json({
-              success: true,
-              ...user,
-              token,
-            });
-          }
-        } catch {}
-      }
-
       // 2. Check company_admins table
       try {
         const adminRes = await db.execute({
@@ -342,42 +311,6 @@ export async function POST(request: Request) {
         }
       } catch (e) {
         console.warn("Notice checking sales_persons:", e);
-      }
-
-      // 5. Check legacy users table
-      const userRes = await db.execute({
-        sql: "SELECT * FROM users WHERE LOWER(username) = LOWER(?) LIMIT 1",
-        args: [cleanUsername],
-      });
-
-      if (userRes.rows.length > 0) {
-        const userRow = userRes.rows[0] as any;
-        const isUserPasswordValid = verifyPassword(cleanPassword, String(userRow.password || ""));
-
-        if (isUserPasswordValid) {
-          const user = {
-            userType: "superadmin" as const,
-            username: String(userRow.username),
-            displayName: "Super Administrator",
-            companyId: null,
-            companyName: null,
-            allowedCamps: [] as string[],
-          };
-          const token = signJwt({
-            sub: user.username,
-            displayName: user.displayName,
-            role: "superadmin",
-            userType: "superadmin",
-            companyId: null,
-            companyName: null,
-            allowedCamps: [],
-          });
-          return NextResponse.json({
-            success: true,
-            ...user,
-            token,
-          });
-        }
       }
 
       return NextResponse.json({ error: "Invalid username or password" }, { status: 400 });
