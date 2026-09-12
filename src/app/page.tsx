@@ -163,9 +163,17 @@ export default function SalesReportDashboard() {
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
   const [isMounted, setIsMounted] = useState(false);
 
+  const getTodayStr = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
   // General Filter States
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  const [startDate, setStartDate] = useState(getTodayStr);
+  const [endDate, setEndDate] = useState(getTodayStr);
   const [selectedAgent, setSelectedAgent] = useState("all");
   const [selectedValidity, setSelectedValidity] = useState("all");
   const [selectedRouter, setSelectedRouter] = useState("all");
@@ -375,7 +383,7 @@ export default function SalesReportDashboard() {
     const todayStr = formatDate(now);
     const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
     setDashboardAnalysisMonth(currentYearMonth);
-    setStartDate(formatDate(firstDay));
+    setStartDate(todayStr);
     setEndDate(todayStr);
 
     const dateStr = now.toLocaleDateString("en-US", { month: "long", day: "2-digit", year: "numeric" });
@@ -487,6 +495,19 @@ export default function SalesReportDashboard() {
 
     return () => clearInterval(interval);
   }, [isLoggedIn, loggedInUser]);
+
+  // When navigating to Voucher Sales, start date and end date always default to that day's date
+  useEffect(() => {
+    if (activeTab === "voucher-sales") {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, "0");
+      const day = String(now.getDate()).padStart(2, "0");
+      const today = `${year}-${month}-${day}`;
+      setStartDate(today);
+      setEndDate(today);
+    }
+  }, [activeTab]);
 
   // Sync Monthly Voucher Sales filter to startDate/endDate
   useEffect(() => {
@@ -1656,7 +1677,7 @@ export default function SalesReportDashboard() {
       return `${year}-${month}-${day}`;
     };
 
-    setStartDate(formatDate(firstDay));
+    setStartDate(formatDate(now));
     setEndDate(formatDate(now));
     setSelectedAgent("all");
     setSelectedValidity("all");
@@ -1805,21 +1826,47 @@ export default function SalesReportDashboard() {
           ];
         });
 
-        const csvContent = "data:text/csv;charset=utf-8,\uFEFF" 
-          + [headers.join(","), ...rows.map((r: any[]) => r.map(val => `"${String(val).replace(/"/g, '""')}"`).join(","))].join("\n");
-        
-        const encodedUri = encodeURI(csvContent);
-        const link = document.createElement("a");
-        link.setAttribute("href", encodedUri);
-        link.setAttribute("download", `Sales_Report_${startDate || "all"}_to_${endDate || "all"}.csv`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        const XLSX = await import("xlsx");
+        const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+
+        // Explicitly format Mobile and Voucher as text so Excel preserves leading zeros (e.g. 055...)
+        for (let r = 1; r <= rows.length; r++) {
+          const cellA = XLSX.utils.encode_cell({ r, c: 0 }); // Column A: Mobile
+          if (worksheet[cellA]) {
+            worksheet[cellA].t = "s";
+            worksheet[cellA].z = "@";
+          }
+          const cellB = XLSX.utils.encode_cell({ r, c: 1 }); // Column B: Voucher
+          if (worksheet[cellB]) {
+            worksheet[cellB].t = "s";
+            worksheet[cellB].z = "@";
+          }
+        }
+
+        // Set column widths matching Excel appearance
+        worksheet["!cols"] = [
+          { wch: 15 }, // Mobile
+          { wch: 14 }, // Voucher
+          { wch: 10 }, // Amount
+          { wch: 12 }, // Validity
+          { wch: 20 }, // Camp
+          { wch: 20 }, // Hotspot
+          { wch: 14 }, // End date
+          { wch: 12 }, // SoldType
+          { wch: 14 }, // PaymentType
+          { wch: 18 }, // sold By
+          { wch: 22 }, // Sold Date
+        ];
+
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Voucher Sales");
+        XLSX.writeFile(workbook, `Voucher_Sales_${startDate || "all"}_to_${endDate || "all"}.xlsx`);
       } else {
         alert("No records to export.");
       }
     } catch (err) {
-      console.error("CSV Export failed:", err);
+      console.error("Excel Export failed:", err);
+      alert("Failed to export Excel file.");
     } finally {
       setLoadingSales(false);
     }
@@ -2962,24 +3009,25 @@ export default function SalesReportDashboard() {
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-[#cfdbe6] bg-slate-50 font-black text-slate-600">
-                    <th className="px-6 py-4">Date & Time</th>
+                    <th className="px-4 py-4 w-14 text-center text-slate-400">Sl. No.</th>
                     <th className="px-6 py-4">Voucher Code</th>
                     <th className="px-6 py-4">Validity</th>
                     <th className="px-6 py-4">Sold By</th>
                     <th className="px-6 py-4">Customer Mobile</th>
                     <th className="px-6 py-4">Camp / Hotspot</th>
+                    <th className="px-6 py-4">Sold Date</th>
                     <th className="px-6 py-4 text-right">Price</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
                   {loadingSales ? (
                     <tr>
-                      <td colSpan={7} className="px-6 py-12 text-center">
+                      <td colSpan={8} className="px-6 py-12 text-center">
                         <RefreshCw className="h-5 w-5 animate-spin text-slate-400 mx-auto" />
                       </td>
                     </tr>
                   ) : salesData?.sales && salesData.sales.length > 0 ? (
-                    salesData.sales.map((record) => {
+                    salesData.sales.map((record, index) => {
                       // Format Dubai timestamp (UTC+4)
                       let formattedTime = record.timestamp;
                       try {
@@ -3005,7 +3053,9 @@ export default function SalesReportDashboard() {
 
                       return (
                         <tr key={record.code} className="hover:bg-slate-50/50 transition-all">
-                          <td className="px-6 py-3 text-slate-500 whitespace-nowrap">{formattedTime}</td>
+                          <td className="px-4 py-3 text-center text-slate-400 font-mono font-bold text-[11px]">
+                            {(salesPage - 1) * entriesLimit + index + 1}
+                          </td>
                           <td className="px-6 py-3 font-bold text-[#3958b2]">{record.code}</td>
                           <td className="px-6 py-3">
                             <span className="bg-purple-50 text-purple-600 px-2 py-0.5 rounded font-black text-[10px]">
@@ -3017,6 +3067,7 @@ export default function SalesReportDashboard() {
                           <td className="px-6 py-3 text-slate-700 font-medium">
                             {record.campName || record.hotspotName || record.routerId || "—"}
                           </td>
+                          <td className="px-6 py-3 text-slate-500 whitespace-nowrap">{formattedTime}</td>
                           <td className="px-6 py-3 text-right font-black text-slate-800">
                             {record.price > 0 ? (
                               `AED ${record.price}`
@@ -3031,7 +3082,7 @@ export default function SalesReportDashboard() {
                     })
                   ) : (
                     <tr>
-                      <td colSpan={7} className="px-6 py-10 text-center text-slate-400 italic">
+                      <td colSpan={8} className="px-6 py-10 text-center text-slate-400 italic">
                         No sales transactions match the filtered criteria.
                       </td>
                     </tr>
@@ -3041,7 +3092,7 @@ export default function SalesReportDashboard() {
                 {!loadingSales && salesData?.sales && salesData.sales.length > 0 && (
                   <tfoot className="bg-slate-50 border-t border-[#cfdbe6] font-bold text-xs text-slate-800">
                     <tr>
-                      <td colSpan={6} className="px-6 py-3 text-right font-extrabold">Total</td>
+                      <td colSpan={7} className="px-6 py-3 text-right font-extrabold">Total</td>
                       <td className="px-6 py-3 text-right font-black text-[#3958b2]">AED {pageTotalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                     </tr>
                   </tfoot>
@@ -4219,22 +4270,6 @@ export default function SalesReportDashboard() {
                       {formatCount(summaryData?.summary.totalSales)}
                     </span>
                   </div>
-                </div>
-
-                {/* Allowed Camps Mini Badges / Scoping info */}
-                <div className="pt-2 border-t border-white/20 flex items-center justify-between text-[10px] font-bold z-10">
-                  <div className="truncate max-w-[200px]" title={userType === "report_user" ? (allowedCamps.length > 0 ? allowedCamps.join(", ") : "None") : "Global unrestricted access"}>
-                    {userType === "report_user" ? (
-                      allowedCamps.length > 0 ? (
-                        <span>🏕️ {allowedCamps.slice(0, 2).join(", ")}{allowedCamps.length > 2 ? ` +${allowedCamps.length - 2} more` : ""}</span>
-                      ) : (
-                        <span className="text-amber-200">⚠️ No Camps Assigned (0)</span>
-                      )
-                    ) : (
-                      <span>🛡️ All Camps Across Companies</span>
-                    )}
-                  </div>
-                  <span className="opacity-80">Last Update: Today's Sync</span>
                 </div>
               </div>
 

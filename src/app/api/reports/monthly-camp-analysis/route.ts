@@ -140,17 +140,130 @@ export async function GET(request: Request) {
 
     const sql = campSalesSql(campScopeSql);
 
-    const [currRows, prevRows] = await Promise.all([
+    // Fetch sales for current and previous months, and fetch the list of camps
+    let campsListSql = "SELECT DISTINCT name as campName FROM camps WHERE name IS NOT NULL AND name != ''";
+    const campsListArgs: any[] = [];
+    if (isReportUserRestricted && effectiveAllowedCamps.length > 0) {
+      const ph = effectiveAllowedCamps.map(() => "?").join(",");
+      campsListSql = `
+        SELECT DISTINCT name as campName 
+        FROM camps 
+        WHERE (name IN (${ph}) OR hotspot_name IN (${ph}) OR CAST(id AS TEXT) IN (${ph}))
+      `;
+      campsListArgs.push(...effectiveAllowedCamps, ...effectiveAllowedCamps, ...effectiveAllowedCamps);
+    }
+
+    // Resolve all router IDs / camp identifiers to their real names via the routers and camps tables
+    let routerLookupSql = "SELECT id, sessionName, COALESCE(NULLIF(camp, ''), NULLIF(sessionName, ''), id) as realCampName FROM routers";
+    const routerLookupArgs: any[] = [];
+    if (isReportUserRestricted && effectiveAllowedCamps.length > 0) {
+      const ph = effectiveAllowedCamps.map(() => "?").join(",");
+      routerLookupSql = `
+        SELECT id, sessionName, COALESCE(NULLIF(camp, ''), NULLIF(sessionName, ''), id) as realCampName 
+        FROM routers 
+        WHERE (id IN (${ph}) OR sessionName IN (${ph}) OR camp IN (${ph}))
+      `;
+      routerLookupArgs.push(...effectiveAllowedCamps, ...effectiveAllowedCamps, ...effectiveAllowedCamps);
+    }
+
+    const [currRows, prevRows, routerRows, campsRows] = await Promise.all([
       db.execute({ sql, args: [currStart, currEnd, ...campScopeArgs] }),
       db.execute({ sql, args: [prevStart, prevEnd, ...campScopeArgs] }),
+      db.execute({ sql: routerLookupSql, args: routerLookupArgs }),
+      db.execute({ sql: campsListSql, args: campsListArgs }),
     ]);
+
+    // Build ID-to-RealName mapping from routers table
+    const idToRealNameMap = new Map<string, string>();
+    for (const r of (routerRows.rows as any[])) {
+      if (r.id) idToRealNameMap.set(String(r.id).toLowerCase(), String(r.realCampName));
+      if (r.sessionName) idToRealNameMap.set(String(r.sessionName).toLowerCase(), String(r.realCampName));
+    }
+
+    const currSalesMap = new Map<string, { campName: string; salesCount: number; revenue: number }>();
+    for (const row of (currRows.rows as any[])) {
+      const resolvedName = idToRealNameMap.get(String(row.campName).toLowerCase()) || String(row.campName);
+      const key = resolvedName.toLowerCase();
+      const existing = currSalesMap.get(key);
+      if (existing) {
+        existing.salesCount += Number(row.salesCount || 0);
+        existing.revenue += Number(row.revenue || 0);
+      } else {
+        currSalesMap.set(key, {
+          campName: resolvedName,
+          salesCount: Number(row.salesCount || 0),
+          revenue: Number(row.revenue || 0),
+        });
+      }
+    }
+
+    const prevSalesMap = new Map<string, { campName: string; salesCount: number; revenue: number }>();
+    for (const row of (prevRows.rows as any[])) {
+      const resolvedName = idToRealNameMap.get(String(row.campName).toLowerCase()) || String(row.campName);
+      const key = resolvedName.toLowerCase();
+      const existing = prevSalesMap.get(key);
+      if (existing) {
+        existing.salesCount += Number(row.salesCount || 0);
+        existing.revenue += Number(row.revenue || 0);
+      } else {
+        prevSalesMap.set(key, {
+          campName: resolvedName,
+          salesCount: Number(row.salesCount || 0),
+          revenue: Number(row.revenue || 0),
+        });
+      }
+    }
+
+    // Determine complete set of unique camps based on resolved real names
+    const allCampNamesMap = new Map<string, string>(); // lowercase -> display name
+
+    if (isReportUserRestricted) {
+      // For restricted users, the camps MUST be ONLY their allowed router IDs/camps mapped to real names
+      for (const id of effectiveAllowedCamps) {
+        const realName = idToRealNameMap.get(id.toLowerCase()) || id;
+        allCampNamesMap.set(realName.toLowerCase(), realName);
+      }
+    } else {
+      // For unrestricted users, collect all camps from camps table and routers table
+      for (const c of (campsRows.rows as any[])) {
+        if (c.campName) allCampNamesMap.set(String(c.campName).toLowerCase(), String(c.campName));
+      }
+      for (const r of (routerRows.rows as any[])) {
+        if (r.realCampName) allCampNamesMap.set(String(r.realCampName).toLowerCase(), String(r.realCampName));
+      }
+      for (const key of currSalesMap.keys()) {
+        if (!allCampNamesMap.has(key)) {
+          allCampNamesMap.set(key, currSalesMap.get(key)!.campName);
+        }
+      }
+      for (const key of prevSalesMap.keys()) {
+        if (!allCampNamesMap.has(key)) {
+          allCampNamesMap.set(key, prevSalesMap.get(key)!.campName);
+        }
+      }
+    }
+
+    // Build merged lists with 0 fallbacks
+    const mergedCurrentMonth = Array.from(allCampNamesMap.entries()).map(([lowerKey, displayName]) => {
+      const existing = currSalesMap.get(lowerKey);
+      return existing || { campName: displayName, salesCount: 0, revenue: 0 };
+    }).sort((a, b) => {
+      if (b.revenue !== a.revenue) return b.revenue - a.revenue;
+      if (b.salesCount !== a.salesCount) return b.salesCount - a.salesCount;
+      return a.campName.localeCompare(b.campName);
+    });
+
+    const mergedPreviousMonth = Array.from(allCampNamesMap.entries()).map(([lowerKey, displayName]) => {
+      const existing = prevSalesMap.get(lowerKey);
+      return existing || { campName: displayName, salesCount: 0, revenue: 0 };
+    });
 
     return NextResponse.json({
       success: true,
       analysisMonth,
       previousMonthKey: `${prevYear}-${prevMonth}`,
-      currentMonth: currRows.rows as unknown as { campName: string; salesCount: number; revenue: number }[],
-      previousMonth: prevRows.rows as unknown as { campName: string; salesCount: number; revenue: number }[],
+      currentMonth: mergedCurrentMonth,
+      previousMonth: mergedPreviousMonth,
       allowedCamps: effectiveAllowedCamps,
     });
   } catch (error) {
