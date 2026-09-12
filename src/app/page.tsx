@@ -2200,16 +2200,35 @@ export default function SalesReportDashboard() {
       return true;
     };
 
-    // Filter and aggregate today's sales for camps that had sales today
+    // Filter and aggregate today's sales for camps
     const campMap = new Map<string, { campName: string; salesCount: number; revenue: number }>();
 
+    // 1. Seed with all allowed camps (for report_user) or all camps (for company_admin / superadmin)
+    if (userType === "report_user" && allowedCamps && allowedCamps.length > 0) {
+      for (const rawCamp of allowedCamps) {
+        const displayName = resolveDisplayName(rawCamp);
+        const key = displayName.toLowerCase();
+        if (!campMap.has(key)) {
+          campMap.set(key, { campName: displayName, salesCount: 0, revenue: 0 });
+        }
+      }
+    } else if (campsList && campsList.length > 0) {
+      for (const campObj of campsList) {
+        const rawName = campObj.name || campObj.hotspot_name || String(campObj.id);
+        if (userType === "company_admin" && !isAllowedForCompanyAdmin(rawName)) continue;
+        const displayName = resolveDisplayName(rawName);
+        const key = displayName.toLowerCase();
+        if (!campMap.has(key)) {
+          campMap.set(key, { campName: displayName, salesCount: 0, revenue: 0 });
+        }
+      }
+    }
+
+    // 2. Merge today's sales data
     for (const c of todayCamps) {
       if (!c.campName) continue;
       const count = Number(c.count || 0);
       const revenue = Number(c.revenue || 0);
-
-      // Only include if sale actually happened today
-      if (count <= 0 && revenue <= 0) continue;
 
       // Check scoping
       if (userType === "report_user" && !isAllowedForReportUser(c.campName)) {
@@ -2235,7 +2254,11 @@ export default function SalesReportDashboard() {
       }
     }
 
-    return Array.from(campMap.values()).sort((a, b) => b.revenue - a.revenue);
+    return Array.from(campMap.values()).sort((a, b) => {
+      if (b.revenue !== a.revenue) return b.revenue - a.revenue;
+      if (b.salesCount !== a.salesCount) return b.salesCount - a.salesCount;
+      return a.campName.localeCompare(b.campName);
+    });
   }, [summaryData, userType, allowedCamps, campsList, companyId, companyName]);
 
 
