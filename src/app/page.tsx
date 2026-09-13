@@ -4556,7 +4556,7 @@ export default function SalesReportDashboard() {
                   onTouchEnd={handleTouchEnd}
                   onMouseDown={handleMouseDown}
                   onMouseUp={handleMouseUp}
-                  className="bg-gradient-to-br from-[#f53e3b] via-[#e11d48] to-[#ad27a7] text-white rounded-xl p-5 shadow-md flex flex-col justify-between relative overflow-hidden group min-h-[160px] select-none cursor-grab active:cursor-grabbing transition-all"
+                  className="bg-gradient-to-br from-[#f53e3b] via-[#e11d48] to-[#ad27a7] text-white rounded-xl p-5 shadow-md flex flex-col justify-between relative overflow-hidden group min-h-[160px] select-none cursor-default transition-all"
                 >
                   <div className="absolute -right-3 -bottom-5 opacity-10 group-hover:scale-110 transition-transform duration-300 pointer-events-none">
                     <Building2 className="h-24 w-24 text-white" />
