@@ -2516,9 +2516,9 @@ export default function SalesReportDashboard() {
         />
 
         <div className="bg-white/95 backdrop-blur-sm border border-white/30 rounded-xl shadow-2xl p-8 w-[400px] flex flex-col text-slate-800 relative z-10">
-          <div className="flex items-center gap-2 justify-center mb-6">
-            <img src="/linkfi-logo.png" alt="LinkFi" className="h-10 w-auto object-contain" />
-            <span className="font-extrabold text-[#1e3c72] text-2xl tracking-wider">LinkFi</span>
+          <div className="flex items-center gap-3 justify-center mb-6">
+            <img src="/linkfi-logo.png" alt="LinkFi" className="h-20 w-auto object-contain drop-shadow-sm" />
+            <span className="font-extrabold text-[#1e3c72] text-4xl tracking-wider">LinkFi</span>
           </div>
 
           <h4 className="font-black text-slate-700 text-center text-sm uppercase tracking-wide mb-6">
