@@ -35,3 +35,14 @@ body {
     transform: translateY(0);
   }
 }
+
+@keyframes wifiBlink {
+  0%, 100% {
+    opacity: 0.35;
+    transform: translateY(-50%) scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: translateY(-50%) scale(1.05);
+  }
+}

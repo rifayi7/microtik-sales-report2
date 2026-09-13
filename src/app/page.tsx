@@ -1834,7 +1834,14 @@ export default function SalesReportDashboard() {
         params.append("allowedCamps", JSON.stringify(allowedCamps));
       }
 
-      const res = await fetch(`/api/reports/sales?${params.toString()}`);
+      if (loggedInUser) params.append("username", loggedInUser);
+
+      const authToken = typeof window !== "undefined" ? localStorage.getItem("linkfi_sales_auth_token") : null;
+      const res = await fetch(`/api/reports/sales?${params.toString()}`, {
+        headers: {
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
+        }
+      });
       const data = await res.json();
       if (data.success && data.sales && data.sales.length > 0) {
         const headers = ["Mobile", "Voucher", "Amount", "Validity", "Camp", "Hotspot", "End date", "SoldType", "PaymentType", "sold By", "Sold Date"];
@@ -2496,8 +2503,19 @@ export default function SalesReportDashboard() {
 
   if (!isLoggedIn) {
     return (
-      <div className="min-h-screen bg-[#d5e5f4] flex items-center justify-center font-sans p-6">
-        <div className="bg-white border border-[#cfdbe6] rounded-xl shadow-2xl p-8 w-[400px] flex flex-col text-slate-800">
+      <div 
+        className="min-h-screen flex items-center justify-center font-sans p-6 relative overflow-hidden"
+        style={{ backgroundImage: "url('/login-bg.jpg')", backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat" }}
+      >
+        {/* Large WiFi icon behind the login form */}
+        <img 
+          src="/linkfi-wifi-icon.svg" 
+          alt="" 
+          className="absolute right-[-100px] top-1/2 w-[750px] h-[750px] opacity-35 pointer-events-none select-none animate-[wifiBlink_3s_ease-in-out_infinite]"
+          aria-hidden="true"
+        />
+
+        <div className="bg-white/95 backdrop-blur-sm border border-white/30 rounded-xl shadow-2xl p-8 w-[400px] flex flex-col text-slate-800 relative z-10">
           <div className="flex items-center gap-2 justify-center mb-6">
             <img src="/linkfi-logo.png" alt="LinkFi" className="h-10 w-auto object-contain" />
             <span className="font-extrabold text-[#1e3c72] text-2xl tracking-wider">LinkFi</span>

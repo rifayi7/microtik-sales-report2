@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 480" fill="none">
+  <defs>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="7" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="halo" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="18"/>
+    </filter>
+  </defs>
+
+  <!-- Soft white halo -->
+  <g stroke="#FFFFFF" stroke-width="50" stroke-linecap="round"
+     opacity=".25" filter="url(#halo)">
+    <path d="M70 150 Q320 -15 570 150"/>
+    <path d="M135 235 Q320 90 505 235"/>
+    <path d="M205 315 Q320 220 435 315"/>
+  </g>
+
+  <!-- White Wi-Fi icon -->
+  <g stroke="#FFFFFF" stroke-width="48" stroke-linecap="round" filter="url(#glow)">
+    <path d="M70 150 Q320 -15 570 150"/>
+    <path d="M135 235 Q320 90 505 235"/>
+    <path d="M205 315 Q320 220 435 315"/>
+  </g>
+
+  <!-- Center dot -->
+  <circle cx="320" cy="405" r="48" fill="#FFFFFF" opacity=".3" filter="url(#halo)"/>
+  <circle cx="320" cy="405" r="43" fill="#FFFFFF"/>
+</svg>
