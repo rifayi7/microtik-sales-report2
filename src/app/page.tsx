@@ -23,11 +23,19 @@ import {
   Settings as CogIcon,
   Plus,
   Trash2,
-  Edit,
+  Edit2,
+  X,
+  Eye,
+  EyeOff,
+  LogOut,
   Building2,
-  BarChart3,
-  X
+  Lock,
+  Phone,
+  Ticket,
+  DollarSign,
+  BarChart3
 } from "lucide-react";
+import * as XLSX from "xlsx";
 import { 
   ResponsiveContainer, 
   AreaChart, 
@@ -1899,18 +1907,17 @@ export default function SalesReportDashboard() {
           ];
         });
 
-        const xlsxModule = await import("xlsx");
-        const XLSX = (xlsxModule as any).utils ? xlsxModule : ((xlsxModule as any).default || xlsxModule);
-        const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+        const xlsx = (XLSX as any).utils ? XLSX : ((XLSX as any).default || XLSX);
+        const worksheet = xlsx.utils.aoa_to_sheet([headers, ...rows]);
 
         // Explicitly format Mobile and Voucher as text so Excel preserves leading zeros (e.g. 055...)
         for (let r = 1; r <= rows.length; r++) {
-          const cellA = XLSX.utils.encode_cell({ r, c: 0 }); // Column A: Mobile
+          const cellA = xlsx.utils.encode_cell({ r, c: 0 }); // Column A: Mobile
           if (worksheet[cellA]) {
             worksheet[cellA].t = "s";
             worksheet[cellA].z = "@";
           }
-          const cellB = XLSX.utils.encode_cell({ r, c: 1 }); // Column B: Voucher
+          const cellB = xlsx.utils.encode_cell({ r, c: 1 }); // Column B: Voucher
           if (worksheet[cellB]) {
             worksheet[cellB].t = "s";
             worksheet[cellB].z = "@";
@@ -1932,14 +1939,14 @@ export default function SalesReportDashboard() {
           { wch: 22 }, // Sold Date
         ];
 
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Voucher Sales");
+        const workbook = xlsx.utils.book_new();
+        xlsx.utils.book_append_sheet(workbook, worksheet, "Voucher Sales");
 
         const fileName = `Voucher_Sales_${startDate || "all"}_to_${endDate || "all"}.xlsx`;
 
         // Browser-native reliable Blob download
         try {
-          const excelBuffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+          const excelBuffer = xlsx.write(workbook, { bookType: "xlsx", type: "array" });
           const blob = new Blob([excelBuffer], {
             type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8"
           });
@@ -1952,8 +1959,8 @@ export default function SalesReportDashboard() {
           document.body.removeChild(link);
           setTimeout(() => window.URL.revokeObjectURL(url), 1000);
         } catch {
-          // Fallback to XLSX.writeFile
-          XLSX.writeFile(workbook, fileName);
+          // Fallback to xlsx.writeFile
+          xlsx.writeFile(workbook, fileName);
         }
       } else {
         alert("No records to export.");
@@ -2121,19 +2128,24 @@ export default function SalesReportDashboard() {
   // Dynamic list of camps for dropdown filters (combines campsList and API filters.camps)
   const dynamicCampOptions = useMemo(() => {
     const names = new Set<string>();
+    const effectiveCompany = userType === "report_user" && companyName ? companyName : selectedRouter;
 
-    // 1. From campsList (database camps table)
+    // 1. From campsList (database camps & routers tables)
     if (Array.isArray(campsList)) {
       campsList.forEach((camp: any) => {
         if (!camp) return;
-        const cName = typeof camp === "string" ? camp : camp.name;
-        const compName = typeof camp === "object" ? camp.company_name : null;
+        const cName = typeof camp === "string" ? camp : (camp.name || camp.camp || camp.sessionName);
+        const compName = typeof camp === "object" ? (camp.company_name || camp.companyName) : null;
+        const compId = typeof camp === "object" ? camp.company_id : null;
 
         if (cName && typeof cName === "string" && cName.trim()) {
           const trimmed = cName.trim();
-          if (selectedRouter === "all" || !selectedRouter) {
+          if (effectiveCompany === "all" || !effectiveCompany) {
             names.add(trimmed);
-          } else if (compName === selectedRouter) {
+          } else if (
+            String(compName || "").toLowerCase() === String(effectiveCompany).toLowerCase() ||
+            (companyId && Number(compId) === Number(companyId))
+          ) {
             names.add(trimmed);
           }
         }
@@ -2149,17 +2161,56 @@ export default function SalesReportDashboard() {
 
     let result = Array.from(names);
 
-    // If report_user, strictly restrict to allowedCamps
+    // If report_user, strictly restrict to allowedCamps (bridging router IDs <-> camp names)
     if (userType === "report_user") {
       if (allowedCamps && allowedCamps.length > 0) {
-        result = result.filter((c) => allowedCamps.some((ac: string) => ac.toLowerCase() === c.toLowerCase()));
+        const allowedLookup = new Set<string>();
+        allowedCamps.forEach((ac: string) => {
+          if (ac) allowedLookup.add(String(ac).toLowerCase().trim());
+        });
+
+        // Bridge router hardware IDs to camp names and vice-versa from campsList
+        if (Array.isArray(campsList)) {
+          campsList.forEach((campObj: any) => {
+            if (!campObj) return;
+            const cId = String(campObj.id || "").toLowerCase().trim();
+            const cName = String(campObj.name || "").toLowerCase().trim();
+            const cCamp = String(campObj.camp || "").toLowerCase().trim();
+            const cSession = String(campObj.sessionName || "").toLowerCase().trim();
+            const cHotspot = String(campObj.hotspot_name || "").toLowerCase().trim();
+
+            if (allowedLookup.has(cId) || allowedLookup.has(cName) || allowedLookup.has(cCamp) || allowedLookup.has(cSession) || allowedLookup.has(cHotspot)) {
+              if (cName) allowedLookup.add(cName);
+              if (cCamp) allowedLookup.add(cCamp);
+              if (cSession) allowedLookup.add(cSession);
+              if (cHotspot) allowedLookup.add(cHotspot);
+              if (cId) allowedLookup.add(cId);
+            }
+          });
+        }
+
+        result = result.filter((c) => allowedLookup.has(String(c).toLowerCase().trim()));
+
+        // Fallback: If result is empty but campsList has matches for allowedLookup, populate directly
+        if (result.length === 0 && Array.isArray(campsList)) {
+          const fallbackSet = new Set<string>();
+          campsList.forEach((campObj: any) => {
+            if (!campObj) return;
+            const cId = String(campObj.id || "").toLowerCase().trim();
+            const cName = String(campObj.name || campObj.camp || campObj.sessionName || "").trim();
+            if (cName && (allowedLookup.has(cId) || allowedLookup.has(cName.toLowerCase()))) {
+              fallbackSet.add(cName);
+            }
+          });
+          result = Array.from(fallbackSet);
+        }
       } else {
         result = [];
       }
     }
 
     return result.sort((a, b) => a.localeCompare(b));
-  }, [campsList, salesData, selectedRouter, userType, allowedCamps]);
+  }, [campsList, salesData, selectedRouter, userType, companyName, companyId, allowedCamps]);
 
   // Dynamic list of agents/sellers for dropdown filter
   const dynamicAgentOptions = useMemo(() => {

@@ -4,6 +4,27 @@ import { verifyPassword, hashPassword, needsRehash, signJwt } from "@/lib/auth-c
 
 export const runtime = "nodejs";
 
+async function expandAllowedCampsWithNames(db: any, allowedCampIds: string[]): Promise<string[]> {
+  if (!allowedCampIds || allowedCampIds.length === 0) return [];
+  try {
+    const ph = allowedCampIds.map(() => "?").join(",");
+    const res = await db.execute({
+      sql: `SELECT id, camp, sessionName, hotspotName FROM routers WHERE id IN (${ph}) OR camp IN (${ph}) OR sessionName IN (${ph})`,
+      args: [...allowedCampIds, ...allowedCampIds, ...allowedCampIds]
+    });
+    const set = new Set<string>(allowedCampIds);
+    res.rows.forEach((r: any) => {
+      if (r.id) set.add(String(r.id));
+      if (r.camp) set.add(String(r.camp));
+      if (r.sessionName) set.add(String(r.sessionName));
+      if (r.hotspotName) set.add(String(r.hotspotName));
+    });
+    return Array.from(set);
+  } catch (e) {
+    return allowedCampIds;
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const db = await getDB();
@@ -78,6 +99,9 @@ export async function POST(request: Request) {
           } catch {
             allowedCamps = [String(row.allowed_camp_ids)];
           }
+        }
+        if (allowedCamps.length > 0) {
+          allowedCamps = await expandAllowedCampsWithNames(db, allowedCamps);
         }
 
         const user = {
@@ -154,6 +178,9 @@ export async function POST(request: Request) {
           } catch {
             allowedCamps = [String(row.allowed_camp_ids)];
           }
+        }
+        if (allowedCamps.length > 0) {
+          allowedCamps = await expandAllowedCampsWithNames(db, allowedCamps);
         }
 
         return NextResponse.json({ valid: true, allowedCamps });
