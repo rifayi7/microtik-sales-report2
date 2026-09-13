@@ -1843,14 +1843,20 @@ export default function SalesReportDashboard() {
         }
       });
       const data = await res.json();
-      if (data.success && data.sales && data.sales.length > 0) {
+      if (!res.ok || !data.success) {
+        alert(data.error || "Failed to fetch sales data for export.");
+        return;
+      }
+
+      if (data.sales && data.sales.length > 0) {
         const headers = ["Mobile", "Voucher", "Amount", "Validity", "Camp", "Hotspot", "End date", "SoldType", "PaymentType", "sold By", "Sold Date"];
         
-        const formatExcelDates = (ts: string, validityDays: number) => {
+        const formatExcelDates = (ts: any, validityDays: number) => {
           if (!ts) return { soldDateStr: "", endDateStr: "" };
-          const cleanTs = ts.replace(" ", "T") + (ts.endsWith("Z") ? "" : "Z");
+          const rawTs = String(ts).trim();
+          const cleanTs = rawTs.replace(" ", "T") + (rawTs.endsWith("Z") ? "" : "Z");
           const dateObj = new Date(cleanTs);
-          if (isNaN(dateObj.getTime())) return { soldDateStr: ts, endDateStr: "" };
+          if (isNaN(dateObj.getTime())) return { soldDateStr: rawTs, endDateStr: "" };
           
           // UTC+4 for Dubai
           const dubaiTime = new Date(dateObj.getTime() + 4 * 3600 * 1000);
@@ -1876,6 +1882,7 @@ export default function SalesReportDashboard() {
         };
 
         const rows = data.sales.map((item: SalesRecord) => {
+          if (!item) return ["", "", 0, "", "", "", "", "P", "Cash", "", ""];
           const { soldDateStr, endDateStr } = formatExcelDates(item.timestamp, item.validity);
           return [
             item.mobile || "",
@@ -1892,7 +1899,8 @@ export default function SalesReportDashboard() {
           ];
         });
 
-        const XLSX = await import("xlsx");
+        const xlsxModule = await import("xlsx");
+        const XLSX = (xlsxModule as any).utils ? xlsxModule : ((xlsxModule as any).default || xlsxModule);
         const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
 
         // Explicitly format Mobile and Voucher as text so Excel preserves leading zeros (e.g. 055...)
@@ -1926,13 +1934,33 @@ export default function SalesReportDashboard() {
 
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Voucher Sales");
-        XLSX.writeFile(workbook, `Voucher_Sales_${startDate || "all"}_to_${endDate || "all"}.xlsx`);
+
+        const fileName = `Voucher_Sales_${startDate || "all"}_to_${endDate || "all"}.xlsx`;
+
+        // Browser-native reliable Blob download
+        try {
+          const excelBuffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+          const blob = new Blob([excelBuffer], {
+            type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8"
+          });
+          const url = window.URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          link.setAttribute("download", fileName);
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+        } catch {
+          // Fallback to XLSX.writeFile
+          XLSX.writeFile(workbook, fileName);
+        }
       } else {
         alert("No records to export.");
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Excel Export failed:", err);
-      alert("Failed to export Excel file.");
+      alert("Failed to export Excel file: " + (err?.message || "Unknown error"));
     } finally {
       setLoadingSales(false);
     }
