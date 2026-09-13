@@ -152,6 +152,7 @@ const COLORS = ["#3958b2", "#26b048", "#ff6228", "#ad27a7", "#862beb", "#35bccc"
 const EXPENSE_CATEGORIES = ["Office Rent", "Router Purchase", "Fuel / Transportation", "Internet bill", "Salary", "Other / General"];
 const COMMON_CATEGORIES = ["Office Equipment", "Office Stationeries", "Repairs & Maintenance", "Team Outings"];
 const SUPPLIERS = ["Landlord Ltd", "Supplier XYZ", "Hardware Supplier A", "Gas Station", "Telcom Co"];
+const INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes auto-logout
 
 const formatCount = (cnt: number | null | undefined): string => {
   if (cnt === null || cnt === undefined || isNaN(Number(cnt))) return "0";
@@ -251,6 +252,7 @@ export default function SalesReportDashboard() {
   // Tab 10: Camps Master Specific States
   const [campsList, setCampsList] = useState<any[]>([]);
   const [loadingCamps, setLoadingCamps] = useState(false);
+  const [campsLoaded, setCampsLoaded] = useState(false);
   const [campSearch, setCampSearch] = useState("");
   const [campSortBy, setCampSortBy] = useState("");
   const [campCompanyFilter, setCampCompanyFilter] = useState("all");
@@ -397,6 +399,21 @@ export default function SalesReportDashboard() {
     try {
       const savedSession = localStorage.getItem("linkfi_sales_user_session");
       if (savedSession) {
+        const lastActivity = Number(localStorage.getItem("linkfi_sales_last_activity") || "0");
+        const now = Date.now();
+        if (lastActivity && now - lastActivity >= INACTIVITY_TIMEOUT_MS) {
+          setIsLoggedIn(false);
+          setIsAuthChecking(false);
+          try {
+            localStorage.removeItem("linkfi_sales_user_session");
+            localStorage.removeItem("linkfi_sales_auth_token");
+            localStorage.removeItem("linkfi_sales_last_activity");
+          } catch {}
+          setAuthError("You have been logged out due to 10 minutes of inactivity.");
+          return;
+        }
+        localStorage.setItem("linkfi_sales_last_activity", now.toString());
+
         const parsed = JSON.parse(savedSession);
         if (parsed?.username) {
           // Keep isAuthChecking(true) and wait for server validation before rendering dashboard
@@ -454,7 +471,8 @@ export default function SalesReportDashboard() {
     fetch("/api/reports/camps", { headers: authHeaders })
       .then(res => res.json())
       .then(d => { if (d.success && Array.isArray(d.data)) setCampsList(d.data); })
-      .catch(console.error);
+      .catch(console.error)
+      .finally(() => setCampsLoaded(true));
 
     fetch("/api/reports/companies", { headers: authHeaders })
       .then(res => res.json())
@@ -467,11 +485,26 @@ export default function SalesReportDashboard() {
       .catch(console.error);
   }, []);
 
-  // Periodic active session validator (polls every 5s when logged in for immediate pause detection)
+  // Periodic active session validator (polls every 5s when logged in for immediate pause detection & inactivity auto-logout)
   useEffect(() => {
     if (!isLoggedIn || !loggedInUser) return;
 
     const interval = setInterval(() => {
+      const lastActivity = Number(localStorage.getItem("linkfi_sales_last_activity") || "0");
+      const now = Date.now();
+      if (lastActivity && now - lastActivity >= INACTIVITY_TIMEOUT_MS) {
+        setIsLoggedIn(false);
+        setIsAuthChecking(false);
+        setIsProfileDropdownOpen(false);
+        try { 
+          localStorage.removeItem("linkfi_sales_user_session"); 
+          localStorage.removeItem("linkfi_sales_auth_token");
+          localStorage.removeItem("linkfi_sales_last_activity");
+        } catch {}
+        setAuthError("You have been logged out due to 10 minutes of inactivity.");
+        return;
+      }
+
       fetch("/api/reports/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -486,6 +519,7 @@ export default function SalesReportDashboard() {
             try { 
               localStorage.removeItem("linkfi_sales_user_session"); 
               localStorage.removeItem("linkfi_sales_auth_token");
+              localStorage.removeItem("linkfi_sales_last_activity");
             } catch {}
             setAuthError(data.error || "Your account has been paused by the administrator. Access is disabled until resumed.");
           }
@@ -495,6 +529,28 @@ export default function SalesReportDashboard() {
 
     return () => clearInterval(interval);
   }, [isLoggedIn, loggedInUser]);
+
+  // Track user activity to reset the 10-minute inactivity timer
+  useEffect(() => {
+    if (!isLoggedIn) return;
+
+    let lastRecord = Date.now();
+    const updateActivity = () => {
+      const now = Date.now();
+      // Throttle localStorage updates to at most once every 3 seconds
+      if (now - lastRecord > 3000) {
+        lastRecord = now;
+        localStorage.setItem("linkfi_sales_last_activity", now.toString());
+      }
+    };
+
+    const events = ["mousedown", "keydown", "scroll", "touchstart", "mousemove"];
+    events.forEach((evt) => window.addEventListener(evt, updateActivity, { passive: true }));
+
+    return () => {
+      events.forEach((evt) => window.removeEventListener(evt, updateActivity));
+    };
+  }, [isLoggedIn]);
 
   // When navigating to Voucher Sales, start date and end date always default to that day's date
   useEffect(() => {
@@ -620,6 +676,7 @@ export default function SalesReportDashboard() {
           if (data.token) {
             localStorage.setItem("linkfi_sales_auth_token", data.token);
           }
+          localStorage.setItem("linkfi_sales_last_activity", Date.now().toString());
           localStorage.setItem("linkfi_sales_user_session", JSON.stringify({
             username: data.username,
             displayName: data.displayName || data.username,
@@ -651,6 +708,7 @@ export default function SalesReportDashboard() {
     try {
       localStorage.removeItem("linkfi_sales_user_session");
       localStorage.removeItem("linkfi_sales_auth_token");
+      localStorage.removeItem("linkfi_sales_last_activity");
     } catch (e) {
       console.warn("Storage remove error:", e);
     }
@@ -664,6 +722,7 @@ export default function SalesReportDashboard() {
       try {
         localStorage.removeItem("linkfi_sales_user_session");
         localStorage.removeItem("linkfi_sales_auth_token");
+        localStorage.removeItem("linkfi_sales_last_activity");
       } catch {}
       setAuthError(data?.error || "Your account has been paused by the administrator. Access is disabled until resumed.");
       return true;
@@ -2144,6 +2203,8 @@ export default function SalesReportDashboard() {
   // Camp sales data for Dashboard Today's Camps Sales Carousel
   // Strictly includes only camps that had sales today (> 0) within allowed/authorized camps
   const campCarouselItems = useMemo(() => {
+    // Wait until campsList has loaded to avoid flashing raw router IDs
+    if (!campsLoaded) return [];
     const todayCamps = summaryData?.comparison?.today?.camps || [];
     if (todayCamps.length === 0) return [];
 
@@ -2259,7 +2320,7 @@ export default function SalesReportDashboard() {
       if (b.salesCount !== a.salesCount) return b.salesCount - a.salesCount;
       return a.campName.localeCompare(b.campName);
     });
-  }, [summaryData, userType, allowedCamps, campsList, companyId, companyName]);
+  }, [summaryData, userType, allowedCamps, campsList, campsLoaded, companyId, companyName]);
 
 
   // Ensure carousel index stays within bounds if items count decreases
@@ -4298,7 +4359,9 @@ export default function SalesReportDashboard() {
                     <span>Today's Sale</span>
                   </div>
                   <span className="bg-white/20 text-white text-[10px] font-black px-2 py-0.5 rounded-full">
-                    {campCarouselItems.filter(c => c.salesCount > 0).length > 0
+                    {(loadingSummary || !campsLoaded)
+                      ? "Loading..."
+                      : campCarouselItems.filter(c => c.salesCount > 0).length > 0
                       ? `${campCarouselItems.filter(c => c.salesCount > 0).length} Camp${campCarouselItems.filter(c => c.salesCount > 0).length !== 1 ? "s" : ""} Active`
                       : "No Camps Active Today"}
                   </span>
@@ -4332,12 +4395,17 @@ export default function SalesReportDashboard() {
                         <span 
                           key={c.campName} 
                           className="bg-black/20 hover:bg-black/30 backdrop-blur-sm px-2 py-0.5 rounded text-[9px] font-bold flex items-center gap-1 transition-all"
-                          title={`${c.campName}: ${formatCount(c.salesCount)} vouchers sold (AED ${c.revenue.toLocaleString()})`}
+                          title={`${c.campName.toUpperCase()}: ${formatCount(c.salesCount)} vouchers sold (AED ${c.revenue.toLocaleString()})`}
                         >
-                          <span className="truncate max-w-[90px]">{c.campName}:</span>
+                          <span className="truncate max-w-[90px]">{c.campName.toUpperCase()}:</span>
                           <span className="bg-white/30 text-white font-black px-1 rounded text-[8px]">{formatCount(c.salesCount)}</span>
                         </span>
                       ))}
+                    </div>
+                  ) : (loadingSummary || !campsLoaded) ? (
+                    <div className="flex justify-center items-center text-white/80 gap-2">
+                      <RefreshCw className="h-3 w-3 animate-spin" />
+                      <span>Loading camps...</span>
                     </div>
                   ) : (
                     <div className="flex justify-between items-center text-white/80">
@@ -4602,9 +4670,12 @@ export default function SalesReportDashboard() {
 
                   {/* Card Main Body with current camp metrics */}
                   {campCarouselItems.length > 0 ? (
-                    <div className="py-2.5 flex-1 flex flex-col justify-center z-10">
+                    <div 
+                      key={campCarouselIndex} 
+                      className="py-2.5 flex-1 flex flex-col justify-center z-10 animate-[fadeSlideIn_0.35s_ease-out]"
+                    >
                       <div className="font-extrabold text-lg tracking-wide truncate flex items-center gap-1.5">
-                        <span>{campCarouselItems[campCarouselIndex]?.campName}</span>
+                        <span>{campCarouselItems[campCarouselIndex]?.campName?.toUpperCase()}</span>
                       </div>
                       <div className="text-xs font-semibold mt-1.5 opacity-95">
                         Sale Amount: <span className="font-black text-white bg-white/25 px-2 py-0.5 rounded shadow-sm">AED {Number(campCarouselItems[campCarouselIndex]?.revenue || 0).toLocaleString()}</span>
@@ -4613,6 +4684,11 @@ export default function SalesReportDashboard() {
                       <div className="text-xs font-semibold mt-1.5 opacity-90 flex items-center gap-2">
                         <span>Vouchers Count: <span className="font-black">{formatCount(campCarouselItems[campCarouselIndex]?.salesCount)}</span></span>
                       </div>
+                    </div>
+                  ) : (loadingSummary || !campsLoaded) ? (
+                    <div className="py-4 text-center flex-1 flex flex-col items-center justify-center z-10 gap-2">
+                      <RefreshCw className="h-5 w-5 animate-spin opacity-80" />
+                      <span className="text-xs font-semibold opacity-85">Loading camp sales...</span>
                     </div>
                   ) : (
                     <div className="py-4 text-center text-xs opacity-85 italic flex-1 flex flex-col items-center justify-center z-10 gap-1">

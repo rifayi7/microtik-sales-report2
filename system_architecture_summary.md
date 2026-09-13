@@ -151,6 +151,10 @@ All tenant entities in the LinkFi ecosystem are bound together strictly using **
      - `POST /api/mikrotik/vouchers/list`: Denies voucher listing with HTTP 403.
    - **Sales & Accounting Portal**:
      - Summary metrics, comparison cards, and voucher sales lists evaluate to `1 = 0`, returning `0 sales`, `0 revenue`, and `[]` empty camp lists.
+6. **10-Minute Idle Inactivity Auto-Logout (Web Portals)**:
+   - Both web applications (`microtik` admin web app and `microtik-sales-report` portal) enforce an automated 10-minute client-side inactivity security policy.
+   - User interactions (`mousedown`, `keydown`, `scroll`, `touchstart`, `mousemove`) update a throttled activity timestamp in storage.
+   - Active 5-second watchdog timers and session restore guards continuously evaluate idle time; when inactivity reaches 10 minutes (600,000 ms), the session is terminated immediately, stored tokens are wiped, and the user is routed to the login interface with a notification.
 
 ---
 
