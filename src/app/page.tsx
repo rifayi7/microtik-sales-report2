@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { 
   TrendingUp, 
   Users, 
-  DollarSign, 
+  Wallet, 
   FileText, 
   Settings, 
   Search, 
@@ -2492,22 +2492,12 @@ export default function SalesReportDashboard() {
     <div className="min-h-screen bg-[#d5e5f4] text-[#212529] font-sans flex flex-col">
       
       {/* ── TOP HEADER MENU (White background) ─────────────────────────────────── */}
-      <header className="fixed top-0 left-0 w-full h-[70px] bg-white border-b border-[#cfdbe6] flex items-center justify-between px-6 z-50">
+      <header className="fixed top-0 left-0 w-full h-[80px] bg-white border-b border-[#cfdbe6] flex items-center justify-between px-6 z-50">
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2.5">
-            <img src="/linkfi-logo.png" alt="LinkFi" className="h-9 w-auto object-contain" />
-            <span className="font-extrabold text-[#1e3c72] text-xl tracking-wider hidden sm:inline">LinkFi</span>
+          <div className="flex items-center gap-3.5">
+            <img src="/linkfi-logo.png" alt="LinkFi" className="h-20 w-auto object-contain py-0.5 select-none" />
+            <span className="font-black text-[#1e3c72] text-2xl sm:text-3xl tracking-wider hidden sm:inline">LinkFi</span>
           </div>
-
-          {/* Role and Company Status Pill — only shown for report_user accounts */}
-          {userType === "report_user" && (
-            <div className="hidden md:flex items-center gap-2 bg-indigo-50 border border-indigo-200 text-indigo-800 text-xs px-3 py-1 rounded-full font-bold">
-              <span>🏢 {companyName || `Company #${companyId}`}</span>
-              <span className="text-indigo-400">•</span>
-              <span className="text-indigo-600">{allowedCamps.length} Allowed Camps</span>
-            </div>
-          )}
-
         </div>
         
         {/* User profile details in top right */}
@@ -2552,7 +2542,7 @@ export default function SalesReportDashboard() {
       </header>
 
       {/* ── SUB NAVIGATION MENU (Light blue background with dropdown support) ──── */}
-      <nav className="fixed top-[70px] left-0 w-full h-[45px] bg-[#bfebff] border-b border-[#aedbff] flex items-center px-6 z-40 overflow-visible shadow-sm">
+      <nav className="fixed top-[80px] left-0 w-full h-[45px] bg-[#bfebff] border-b border-[#aedbff] flex items-center px-6 z-40 overflow-visible shadow-sm">
         <ul className="flex items-center gap-5 text-sm font-bold whitespace-nowrap overflow-visible">
           <li>
             <button 
@@ -2654,7 +2644,7 @@ export default function SalesReportDashboard() {
                   : "text-[#4a6b82] hover:text-[#1e3c72]"
               }`}
             >
-              <DollarSign className="h-4 w-4" />
+              <Wallet className="h-4 w-4" />
               Payments
               <ChevronDown className="h-3.5 w-3.5" />
             </button>
@@ -2795,7 +2785,7 @@ export default function SalesReportDashboard() {
       </nav>
 
       {/* ── MAIN WORKSPACE CONTENT ─────────────────────────────────────── */}
-      <main className="flex-1 flex flex-col min-w-0 pt-[135px] pb-8 px-6 overflow-y-auto">
+      <main className="flex-1 flex flex-col min-w-0 pt-[145px] pb-8 px-6 overflow-y-auto">
         
         {/* Title bar of the section */}
         <div className="flex justify-between items-center mb-6">
@@ -4268,7 +4258,7 @@ export default function SalesReportDashboard() {
                 
                   <div className="text-xs uppercase font-bold tracking-widest opacity-85 mb-2 flex justify-between items-center z-10">
                   <div className="flex items-center gap-1.5">
-                    <DollarSign className="h-4 w-4" />
+                    <Wallet className="h-4 w-4" />
                     <span>Outstanding Balance</span>
                   </div>
                   <span className="bg-white/20 text-white text-[10px] font-black px-2 py-0.5 rounded-full">
@@ -4361,12 +4351,12 @@ export default function SalesReportDashboard() {
               {/* Card 3: Expense - Real data from expenses table */}
               <div className="md:col-span-4 bg-gradient-to-br from-[#ffbc36] to-[#ff6228] text-white rounded-xl p-5 shadow-md relative overflow-hidden group min-h-[140px] flex flex-col justify-between">
                 <div className="absolute -right-3 -bottom-5 opacity-10 group-hover:scale-110 transition-transform duration-300 pointer-events-none">
-                  <DollarSign className="h-28 w-28 text-white" />
+                  <Wallet className="h-28 w-28 text-white" />
                 </div>
                 
                 <div className="text-xs uppercase font-bold tracking-widest opacity-85 mb-2 flex justify-between items-center z-10">
                   <div className="flex items-center gap-1.5">
-                    <DollarSign className="h-4 w-4" />
+                    <Wallet className="h-4 w-4" />
                     <span>Expense</span>
                   </div>
                   <span className="bg-white/20 text-white text-[10px] font-black px-2 py-0.5 rounded-full">

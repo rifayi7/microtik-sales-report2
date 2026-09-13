@@ -18,41 +18,86 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: true, data: [] });
     }
 
-    let query = "SELECT * FROM camps";
-    let conditions: string[] = [];
-    let params: any[] = [];
-
-    if (isReportUserRestricted && effectiveAllowedCamps.length > 0) {
-      const placeholders = effectiveAllowedCamps.map(() => "?").join(",");
-      conditions.push(`(name IN (${placeholders}) OR hotspot_name IN (${placeholders}) OR CAST(id AS TEXT) IN (${placeholders}))`);
-      params.push(...effectiveAllowedCamps, ...effectiveAllowedCamps, ...effectiveAllowedCamps);
+    // Fetch from camps table
+    let campsRows: any[] = [];
+    try {
+      const campResult = await db.execute("SELECT * FROM camps");
+      campsRows = campResult.rows as any[];
+    } catch (e) {
+      campsRows = [];
     }
 
-    if (search && search.trim() !== "") {
-      conditions.push("(name LIKE ? OR hotspot_name LIKE ?)");
-      const searchParam = `%${search.trim()}%`;
-      params.push(searchParam, searchParam);
+    // Fetch from routers table to resolve router hardware IDs (e.g. router-1455-8497074D0F40 -> CAMP6)
+    let routerRows: any[] = [];
+    try {
+      const routerResult = await db.execute(`
+        SELECT r.id, 
+               COALESCE(NULLIF(r.camp, ''), NULLIF(r.sessionName, ''), NULLIF(r.hotspotName, ''), r.id) as name,
+               COALESCE(NULLIF(r.hotspotName, ''), NULLIF(r.sessionName, ''), NULLIF(r.camp, ''), r.id) as hotspot_name,
+               c.name as company_name,
+               r.company_id
+        FROM routers r
+        LEFT JOIN companies c ON r.company_id = c.id
+        WHERE (r.is_active = 1 OR r.is_active IS NULL)
+      `);
+      routerRows = routerResult.rows as any[];
+    } catch (e) {
+      routerRows = [];
+    }
+
+    // Combine and deduplicate
+    const combinedMap = new Map<string, any>();
+    for (const c of campsRows) {
+      const key = String(c.name || c.id).toLowerCase();
+      combinedMap.set(key, c);
+    }
+    for (const r of routerRows) {
+      const key = String(r.name || r.id).toLowerCase();
+      if (!combinedMap.has(key)) {
+        combinedMap.set(key, r);
+      }
+      // Also register router id mapping
+      if (r.id) {
+        combinedMap.set(String(r.id).toLowerCase(), r);
+      }
+    }
+
+    let allCamps = Array.from(combinedMap.values());
+
+    // Filter by allowed camps if report user
+    if (isReportUserRestricted && effectiveAllowedCamps.length > 0) {
+      const lowerAllowed = new Set(effectiveAllowedCamps.map(a => a.toLowerCase()));
+      allCamps = allCamps.filter(c => {
+        const idStr = String(c.id || "").toLowerCase();
+        const nameStr = String(c.name || "").toLowerCase();
+        const hotspotStr = String(c.hotspot_name || "").toLowerCase();
+        return lowerAllowed.has(idStr) || lowerAllowed.has(nameStr) || lowerAllowed.has(hotspotStr);
+      });
     }
 
     if (company && company !== "all" && company !== "") {
-      conditions.push("company_name = ?");
-      params.push(company);
+      const lowerComp = company.toLowerCase();
+      allCamps = allCamps.filter(c => String(c.company_name || "").toLowerCase() === lowerComp);
     }
 
-    if (conditions.length > 0) {
-      query += " WHERE " + conditions.join(" AND ");
+    if (search && search.trim() !== "") {
+      const q = search.trim().toLowerCase();
+      allCamps = allCamps.filter(c => 
+        String(c.name || "").toLowerCase().includes(q) || 
+        String(c.hotspot_name || "").toLowerCase().includes(q) ||
+        String(c.id || "").toLowerCase().includes(q)
+      );
     }
 
     if (sortBy === "ASC") {
-      query += " ORDER BY name ASC";
+      allCamps.sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
     } else if (sortBy === "DESC") {
-      query += " ORDER BY name DESC";
+      allCamps.sort((a, b) => String(b.name || "").localeCompare(String(a.name || "")));
     } else {
-      query += " ORDER BY id ASC";
+      allCamps.sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
     }
 
-    const rows = (await db.execute({ sql: query, args: [...params] })).rows as any[];
-    return NextResponse.json({ success: true, data: rows });
+    return NextResponse.json({ success: true, data: allCamps });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to load camps" }, { status: 500 });
   }
