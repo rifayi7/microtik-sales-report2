@@ -7,7 +7,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 # 🏛️ My WiFi Ecosystem Architecture & Documentation Rules
 
 This project is part of a 3-project interconnected ecosystem:
-1. `microtik`: Main Web Admin Portal & Central API Backend (`https://microtik-nine.vercel.app`)
+1. `linkfi` (formerly `microtik`): Main Web Admin Portal & Central API Backend (`https://linkfi-panel.vercel.app`)
 2. `microtik-sales-report`: Sales Analytics, Master Data & Accounting Dashboard
 3. `microtik-mobileapp`: Mobile POS & Operator App (Expo React Native)
 

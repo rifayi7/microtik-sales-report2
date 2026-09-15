@@ -17,7 +17,7 @@ graph TD
 
     subgraph 🌐 Core Web & API Gateway (Next.js @ Vercel)
         CW[Web Admin Portal & Central API Gateway]
-        CW_URL["https://microtik-nine.vercel.app"]
+        CW_URL["https://linkfi-panel.vercel.app"]
     end
 
     subgraph 📊 Sales & Accounting Portal (Next.js)
@@ -187,3 +187,35 @@ All tenant entities in the LinkFi ecosystem are bound together strictly using **
       - **1. Voucher Sales (`voucher-sales`)**: Live paginated sales ledger with real-time dynamic pricing fallback, customer mobile, salesperson, camp/hotspot identification, and CSV export.
       - **2. Monthly Voucher Sales (`monthly-sales`)**: Dynamic month picker and camp dropdown with live aggregated `Total` unit count and `Amount` (AED) summary pills and daily sales volume bar chart.
       - **3. Camps - Monthly Voucher Sales (`sales-chart`)**: Multi-month retrospective comparison chart dynamically mapping sales across camps within the selected window, resolving camp names against `campsList`, and supporting stacked/grouped visualizations.
+
+---
+
+## ⚡ Performance, Mobile Network Resilience & Idempotency Safeguards
+
+1. **Mobile App Request Deduplication & Render Loop Elimination**:
+   - In `gateway-context.tsx`, in-flight requests to `/api/mikrotik/routers` are cached and deduplicated (`inFlightRouterSync`) with a 2.5s debounce throttle.
+   - Deep equality checks on router lists prevent updating state with identical data, eliminating cascading React re-renders across consumers.
+   - Screen focus effects on `recharge.tsx` are consolidated and guarded with `isLoadingPlansRef` and memoized router IDs, eliminating infinite feedback loops (which previously generated up to 11 concurrent requests/sec).
+   - In `_layout.tsx`, 10-second heartbeat polling only re-syncs routers if `allowedCamps` has actually changed on the server.
+2. **Duplicate Recharge Protection (Idempotency Window)**:
+   - In `/api/mikrotik/vouchers/redeem`, a 45-second idempotency check queries recent redemptions matching `used_by = mobileNumber`, `router_id`, and `validity_days`.
+   - If an operator taps "Recharge" again after a temporary client timeout or network glitch while the server was completing the transaction, the API returns the already redeemed voucher with `{ success: true, alreadyCompleted: true }`, completely preventing double-billing or burning duplicate inventory.
+3. **Network Timeouts**:
+   - Mobile app network client timeout is configured to 30,000ms (30s) to accommodate cellular data latencies, MikroTik TCP socket establishment, and serverless cold starts.
+
+---
+
+## ⏱️ Dynamic Company Timezone & MikroTik User Comment Formatting
+
+1. **Company-Scoped Timezone Resolution**:
+   - Every client company configures an authoritative `timezone` in `companies.timezone` (e.g. `Asia/Dubai`, `Asia/Riyadh`, `Asia/Kolkata`). Default: `Asia/Dubai`.
+   - When a voucher is sold / redeemed via `POST /api/mikrotik/vouchers/redeem`, the system dynamically resolves the target timezone by querying the router's assigned company (`routers.company_id -> companies.timezone`), with fallback to the operator's company (`sales_persons.company_id -> companies.timezone`).
+2. **Winbox Hotspot User Comment Format**:
+   - The user comment written to MikroTik RouterOS (`/ip/hotspot/user/set =comment=...`) includes both the date and exact time with 12-hour AM/PM formatting in the company's assigned timezone:
+     ```text
+     Sold on M/D/YYYY, h:mm A
+     ```
+   - Examples: `Sold on 9/15/2026, 9:14 PM` (for `Asia/Dubai`) or `Sold on 9/15/2026, 8:14 PM` (for `Asia/Riyadh`).
+   - Ensures network engineers inspecting RouterOS directly in Winbox see the precise local activation timestamp without timezone discrepancies.
+
+
