@@ -2342,21 +2342,21 @@ export default function SalesReportDashboard() {
   }, [salesPersonsList, salesData, loggedInUser]);
 
   // Camp sales data for Dashboard Today's Camps Sales Carousel
-  // Strictly includes only camps that had sales today (> 0) within allowed/authorized camps
+  // Includes all allowed/authorized camps in the carousel slider (even if 0 sales today)
   const campCarouselItems = useMemo(() => {
     // Wait until campsList has loaded to avoid flashing raw router IDs
     if (!campsLoaded) return [];
     const todayCamps = summaryData?.comparison?.today?.camps || [];
-    if (todayCamps.length === 0) return [];
 
     // Helper: resolve clean display name from campsList if possible
     const resolveDisplayName = (raw: string): string => {
       if (!raw) return "Camp";
       if (campsList.length > 0) {
+        const lower = raw.toLowerCase().trim();
         const match = campsList.find((camp: any) =>
-          camp.name?.toLowerCase() === raw.toLowerCase() ||
-          camp.hotspot_name?.toLowerCase() === raw.toLowerCase() ||
-          String(camp.id) === raw
+          camp.name?.toLowerCase().trim() === lower ||
+          camp.hotspot_name?.toLowerCase().trim() === lower ||
+          String(camp.id || "").toLowerCase().trim() === lower
         );
         if (match?.name) return match.name;
       }
