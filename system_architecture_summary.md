@@ -213,9 +213,9 @@ All tenant entities in the LinkFi ecosystem are bound together strictly using **
 2. **Winbox Hotspot User Comment Format**:
    - The user comment written to MikroTik RouterOS (`/ip/hotspot/user/set =comment=...`) includes both the date and exact time with 12-hour AM/PM formatting in the company's assigned timezone:
      ```text
-     Sold on M/D/YYYY, h:mm A
+     Sold on DD/MM/YYYY, h:mm A
      ```
-   - Examples: `Sold on 9/15/2026, 9:14 PM` (for `Asia/Dubai`) or `Sold on 9/15/2026, 8:14 PM` (for `Asia/Riyadh`).
+   - Examples: `Sold on 16/09/2026, 9:14 AM` (for `Asia/Dubai`) or `Sold on 16/09/2026, 8:14 AM` (for `Asia/Riyadh`).
    - Ensures network engineers inspecting RouterOS directly in Winbox see the precise local activation timestamp without timezone discrepancies.
 
 
