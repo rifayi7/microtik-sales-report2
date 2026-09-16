@@ -444,7 +444,16 @@ export default function SalesReportDashboard() {
               if (data && data.valid) {
                 setIsLoggedIn(true);
                 if (data.allowedCamps) {
-                  setAllowedCamps(Array.isArray(data.allowedCamps) ? data.allowedCamps : []);
+                  const freshCamps = Array.isArray(data.allowedCamps) ? data.allowedCamps : [];
+                  setAllowedCamps(freshCamps);
+                  try {
+                    const sessStr = localStorage.getItem("linkfi_sales_user_session");
+                    if (sessStr) {
+                      const sess = JSON.parse(sessStr);
+                      sess.allowedCamps = freshCamps;
+                      localStorage.setItem("linkfi_sales_user_session", JSON.stringify(sess));
+                    }
+                  } catch {}
                 }
               } else {
                 setIsLoggedIn(false);
@@ -530,6 +539,24 @@ export default function SalesReportDashboard() {
               localStorage.removeItem("linkfi_sales_last_activity");
             } catch {}
             setAuthError(data.error || "Your account has been paused by the administrator. Access is disabled until resumed.");
+          } else if (data && data.valid && Array.isArray(data.allowedCamps)) {
+            const serverCamps = data.allowedCamps;
+            setAllowedCamps((prev) => {
+              const prevKey = [...prev].sort().join(",");
+              const nextKey = [...serverCamps].sort().join(",");
+              if (prevKey !== nextKey) {
+                try {
+                  const sessStr = localStorage.getItem("linkfi_sales_user_session");
+                  if (sessStr) {
+                    const sess = JSON.parse(sessStr);
+                    sess.allowedCamps = serverCamps;
+                    localStorage.setItem("linkfi_sales_user_session", JSON.stringify(sess));
+                  }
+                } catch {}
+                return serverCamps;
+              }
+              return prev;
+            });
           }
         })
         .catch(() => {});
@@ -1050,8 +1077,15 @@ export default function SalesReportDashboard() {
       if (s) params.append("search", s);
       if (sb) params.append("sortBy", sb);
       if (c && c !== "all") params.append("company", c);
+      if (loggedInUser) params.append("username", loggedInUser);
+      if (userType) params.append("userType", userType);
 
-      const res = await fetch(`/api/reports/camps?${params.toString()}`);
+      const authToken = typeof window !== "undefined" ? localStorage.getItem("linkfi_sales_auth_token") : null;
+      const res = await fetch(`/api/reports/camps?${params.toString()}`, {
+        headers: {
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
+        }
+      });
       const data = await res.json();
       if (data.success) {
         setCampsList(data.data);
@@ -2974,7 +3008,29 @@ export default function SalesReportDashboard() {
             {activeTab === "dashboard" && (
               <button
                 type="button"
-                onClick={() => {
+                onClick={async () => {
+                  if (loggedInUser) {
+                    try {
+                      const sRes = await fetch("/api/reports/auth", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ action: "check-session", username: loggedInUser }),
+                      });
+                      const sData = await sRes.json();
+                      if (sData && sData.valid && Array.isArray(sData.allowedCamps)) {
+                        const fresh = sData.allowedCamps;
+                        setAllowedCamps(fresh);
+                        try {
+                          const sessStr = localStorage.getItem("linkfi_sales_user_session");
+                          if (sessStr) {
+                            const sess = JSON.parse(sessStr);
+                            sess.allowedCamps = fresh;
+                            localStorage.setItem("linkfi_sales_user_session", JSON.stringify(sess));
+                          }
+                        } catch {}
+                      }
+                    } catch {}
+                  }
                   fetchSummary();
                   fetchMonthlyCampAnalysis();
                   fetchCamps();
