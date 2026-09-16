@@ -502,11 +502,14 @@ export default function SalesReportDashboard() {
       .catch(console.error);
   }, []);
 
-  // Periodic active session validator (polls every 5s when logged in for immediate pause detection & inactivity auto-logout)
+  // Active session validator & permission sync:
+  // - Polls every 30s when tab is active (stops when tab is hidden/minimized)
+  // - Instantly re-syncs on window focus or tab visibility change
   useEffect(() => {
     if (!isLoggedIn || !loggedInUser) return;
 
-    const interval = setInterval(() => {
+    const syncSession = async () => {
+      // Check client-side inactivity auto-logout
       const lastActivity = Number(localStorage.getItem("linkfi_sales_last_activity") || "0");
       const now = Date.now();
       if (lastActivity && now - lastActivity >= INACTIVITY_TIMEOUT_MS) {
@@ -522,47 +525,65 @@ export default function SalesReportDashboard() {
         return;
       }
 
-      fetch("/api/reports/auth", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "check-session", username: loggedInUser }),
-      })
-        .then((r) => r.json())
-        .then((data) => {
-          if (data && !data.valid) {
-            setIsLoggedIn(false);
-            setIsAuthChecking(false);
-            setIsProfileDropdownOpen(false);
-            try { 
-              localStorage.removeItem("linkfi_sales_user_session"); 
-              localStorage.removeItem("linkfi_sales_auth_token");
-              localStorage.removeItem("linkfi_sales_last_activity");
-            } catch {}
-            setAuthError(data.error || "Your account has been paused by the administrator. Access is disabled until resumed.");
-          } else if (data && data.valid && Array.isArray(data.allowedCamps)) {
-            const serverCamps = data.allowedCamps;
-            setAllowedCamps((prev) => {
-              const prevKey = [...prev].sort().join(",");
-              const nextKey = [...serverCamps].sort().join(",");
-              if (prevKey !== nextKey) {
-                try {
-                  const sessStr = localStorage.getItem("linkfi_sales_user_session");
-                  if (sessStr) {
-                    const sess = JSON.parse(sessStr);
-                    sess.allowedCamps = serverCamps;
-                    localStorage.setItem("linkfi_sales_user_session", JSON.stringify(sess));
-                  }
-                } catch {}
-                return serverCamps;
-              }
-              return prev;
-            });
-          }
-        })
-        .catch(() => {});
-    }, 5000);
+      // Skip background network calls if tab is hidden/minimized
+      if (typeof document !== "undefined" && document.hidden) return;
 
-    return () => clearInterval(interval);
+      try {
+        const r = await fetch("/api/reports/auth", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "check-session", username: loggedInUser }),
+        });
+        const data = await r.json();
+        if (data && !data.valid) {
+          setIsLoggedIn(false);
+          setIsAuthChecking(false);
+          setIsProfileDropdownOpen(false);
+          try { 
+            localStorage.removeItem("linkfi_sales_user_session"); 
+            localStorage.removeItem("linkfi_sales_auth_token");
+            localStorage.removeItem("linkfi_sales_last_activity");
+          } catch {}
+          setAuthError(data.error || "Your account has been paused by the administrator. Access is disabled until resumed.");
+        } else if (data && data.valid && Array.isArray(data.allowedCamps)) {
+          const serverCamps = data.allowedCamps;
+          setAllowedCamps((prev) => {
+            const prevKey = [...prev].sort().join(",");
+            const nextKey = [...serverCamps].sort().join(",");
+            if (prevKey !== nextKey) {
+              try {
+                const sessStr = localStorage.getItem("linkfi_sales_user_session");
+                if (sessStr) {
+                  const sess = JSON.parse(sessStr);
+                  sess.allowedCamps = serverCamps;
+                  localStorage.setItem("linkfi_sales_user_session", JSON.stringify(sess));
+                }
+              } catch {}
+              return serverCamps;
+            }
+            return prev;
+          });
+        }
+      } catch {}
+    };
+
+    // 1. Lightweight 30-second background polling
+    const interval = setInterval(syncSession, 30000);
+
+    // 2. Instant sync whenever user returns to or focuses the tab
+    const handleFocus = () => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        syncSession();
+      }
+    };
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleFocus);
+    };
   }, [isLoggedIn, loggedInUser]);
 
   // Track user activity to reset the 10-minute inactivity timer
