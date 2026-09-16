@@ -66,7 +66,9 @@ All tenant entities in the LinkFi ecosystem are bound together strictly using **
    - Web Admin Portal header & sidebar dynamically display account level:
      - `🛡️ Super Administrator`
      - `🏢 Company Admin: {CompanyName}`
-   - Official branding updated across web surfaces to **LinkFi** featuring the official logo.
+   - Official branding updated across web surfaces:
+     - **Web App 1**: `LinkFi Control Center` (Favicon / Icon: `/linkfi-emblem.png`, Core Logo: `/linkfi-logo.png`)
+     - **Web App 2**: `LinkFi | Sales & Performance Reports` (Favicon / Icon: `/linkfi-brand-icon.png`, Core Logo: `/linkfi-logo.png`)
 
 ---
 
