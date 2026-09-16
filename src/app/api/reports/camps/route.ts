@@ -12,7 +12,7 @@ export async function GET(request: Request) {
     const company = url.searchParams.get("company");
     const sortBy = url.searchParams.get("sortBy");
 
-    const { effectiveAllowedCamps, isReportUserRestricted } = await buildWhereClauseAsync(url.searchParams, request);
+    const { effectiveAllowedCamps, effectiveCompanyId, isReportUserRestricted } = await buildWhereClauseAsync(url.searchParams, request);
 
     if (isReportUserRestricted && effectiveAllowedCamps.length === 0) {
       return NextResponse.json({ success: true, data: [] });
@@ -45,20 +45,22 @@ export async function GET(request: Request) {
       routerRows = [];
     }
 
-    // Combine and deduplicate
+    // Combine and deduplicate strictly by Router ID (Primary Hardware Identity)
     const combinedMap = new Map<string, any>();
-    for (const c of campsRows) {
-      const key = String(c.name || c.id).toLowerCase();
-      combinedMap.set(key, c);
-    }
     for (const r of routerRows) {
-      const key = String(r.name || r.id).toLowerCase();
+      const key = String(r.id).toLowerCase();
+      combinedMap.set(key, {
+        id: r.id,
+        name: r.name,
+        hotspot_name: r.hotspot_name,
+        company_name: r.company_name,
+        company_id: r.company_id,
+      });
+    }
+    for (const c of campsRows) {
+      const key = String(c.id || c.name).toLowerCase();
       if (!combinedMap.has(key)) {
-        combinedMap.set(key, r);
-      }
-      // Also register router id mapping
-      if (r.id) {
-        combinedMap.set(String(r.id).toLowerCase(), r);
+        combinedMap.set(key, c);
       }
     }
 
@@ -66,13 +68,18 @@ export async function GET(request: Request) {
 
     // Filter by allowed camps if report user
     if (isReportUserRestricted && effectiveAllowedCamps.length > 0) {
-      const lowerAllowed = new Set(effectiveAllowedCamps.map(a => a.toLowerCase()));
+      const lowerAllowed = new Set(effectiveAllowedCamps.map(a => a.toLowerCase().trim()));
       allCamps = allCamps.filter(c => {
-        const idStr = String(c.id || "").toLowerCase();
-        const nameStr = String(c.name || "").toLowerCase();
-        const hotspotStr = String(c.hotspot_name || "").toLowerCase();
+        const idStr = String(c.id || "").toLowerCase().trim();
+        const nameStr = String(c.name || "").toLowerCase().trim();
+        const hotspotStr = String(c.hotspot_name || "").toLowerCase().trim();
         return lowerAllowed.has(idStr) || lowerAllowed.has(nameStr) || lowerAllowed.has(hotspotStr);
       });
+    }
+
+    // Filter by company ID if tenant is scoped
+    if (effectiveCompanyId) {
+      allCamps = allCamps.filter(c => !c.company_id || Number(c.company_id) === Number(effectiveCompanyId));
     }
 
     if (company && company !== "all" && company !== "") {
